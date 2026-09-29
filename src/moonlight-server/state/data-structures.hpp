@@ -44,30 +44,22 @@ enum STANDARD_PORTS_MAPPING {
 inline int get_port(STANDARD_PORTS_MAPPING port) {
   switch (port) {
   case HTTPS_PORT:
-    return utils::get_env("HEALER_HTTPS_PORT")
-        ? std::stoi(utils::get_env("HEALER_HTTPS_PORT")
-                    : HTTPS_PORT;
-                    case HTTP_PORT
-                    : return utils::get_env("HEALER_HTTP_PORT")
-                    ? std::stoi(utils::get_env("HEALER_HTTP_PORT")
-                                : HTTP_PORT;
-                                case CONTROL_PORT
-                                : return utils::get_env("HEALER_CONTROL_PORT")
-                                ? std::stoi(utils::get_env("HEALER_CONTROL_PORT")
-                                            : CONTROL_PORT;
-                                            case VIDEO_PING_PORT
-                                            : return utils::get_env("HEALER_VIDEO_PING_PORT")
-                                            ? std::stoi(utils::get_env("HEALER_VIDEO_PING_PORT")
-                                                        : VIDEO_PING_PORT;
-                                                        case AUDIO_PING_PORT
-                                                        : return utils::get_env("HEALER_AUDIO_PING_PORT")
-                                                        ? std::stoi(utils::get_env("HEALER_AUDIO_PING_PORT")
-                                                                    : AUDIO_PING_PORT;
-                                                                    case RTSP_SETUP_PORT
-                                                                    : return utils::get_env("HEALER_RTSP_SETUP_PORT")
-                                                                    ? std::stoi(utils::get_env("HEALER_RTSP_SETUP_PORT")
-                                                                                : RTSP_SETUP_PORT;
+    return utils::get_env("HEALER_HTTPS_PORT") ? std::stoi(utils::get_env("HEALER_HTTPS_PORT")) : HTTPS_PORT;
+  case HTTP_PORT:
+    return utils::get_env("HEALER_HTTP_PORT") ? std::stoi(utils::get_env("HEALER_HTTP_PORT")) : HTTP_PORT;
+  case CONTROL_PORT:
+    return utils::get_env("HEALER_CONTROL_PORT") ? std::stoi(utils::get_env("HEALER_CONTROL_PORT")) : CONTROL_PORT;
+  case VIDEO_PING_PORT:
+    return utils::get_env("HEALER_VIDEO_PING_PORT") ? std::stoi(utils::get_env("HEALER_VIDEO_PING_PORT"))
+                                                    : VIDEO_PING_PORT;
+  case AUDIO_PING_PORT:
+    return utils::get_env("HEALER_AUDIO_PING_PORT") ? std::stoi(utils::get_env("HEALER_AUDIO_PING_PORT"))
+                                                    : AUDIO_PING_PORT;
+  case RTSP_SETUP_PORT:
+    return utils::get_env("HEALER_RTSP_SETUP_PORT") ? std::stoi(utils::get_env("HEALER_RTSP_SETUP_PORT"))
+                                                    : RTSP_SETUP_PORT;
   }
+
   return -1;
 }
 
