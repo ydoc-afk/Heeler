@@ -70,14 +70,14 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     auto cache_key = client_id.value() + "@" + client_ip;
 
     logs::log(logs::info, "Unpairing: {}", cache_key);
-    auto cache = state->pairing_cache->load();
-    auto it = cache.find(cache_key);
-    if (it == cache.end()) {
+    auto cache = state->pairing_cache->load().get();
+    auto cached_client = cache.find(cache_key);
+    if (!cached_client) {
       logs::log(logs::warning, "[HTTP] /unpair request for unknown client: {}", cache_key);
       endpoints::server_error<SimpleWeb::HTTP>(resp);
       return;
     }
-    state::unpair(state->config, state::PairedClient{.client_cert = it->second.client_cert});
+    state::unpair(state->config, state::PairedClient{.client_cert = cached_client->client_cert});
 
     XML xml;
     xml.put("root.<xmlattr>.status_code", 200);

@@ -5,7 +5,9 @@
 #include <catch2/matchers/catch_matchers_contains.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
+#include <curl/curl.h>
 #include <rest/endpoints.hpp>
+#include <rest/rest.hpp>
 
 using Catch::Matchers::Equals;
 
@@ -557,4 +559,41 @@ TEST_CASE("Multiple users", "[HTTP]") {
 
   REQUIRE(session4->video_stream_port == 48100);
   REQUIRE(session4->audio_stream_port == 48200);
+}
+
+TEST_CASE("HTTP /unpair input validation", "[HTTP]") {
+  // /unpair is unauthenticated: malformed requests must get an error reply, never take the server down
+  auto app_state = immer::box<state::AppState>(
+      state::AppState{.pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+                      .pairing_atom = std::make_shared<
+                          immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+                      .event_bus = std::make_shared<events::EventBusType>()});
+
+  constexpr int port = 47790;
+  HttpServer server;
+  std::thread server_thread([&] { HTTPServers::startServer(&server, app_state, port); });
+  std::this_thread::sleep_for(std::chrono::milliseconds(300)); // Wait for the server to start
+
+  auto get_status = [&](const std::string &path) {
+    auto curl = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>(curl_easy_init(), curl_easy_cleanup);
+    curl_easy_setopt(curl.get(), CURLOPT_URL, fmt::format("http://127.0.0.1:{}{}", port, path).c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 5L);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, +[](char *, size_t s, size_t n, void *) { return s * n; });
+    long status = 0;
+    if (curl_easy_perform(curl.get()) == CURLE_OK) {
+      curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &status);
+    }
+    return status;
+  };
+
+  auto missing_id = get_status("/unpair");
+  auto unknown_client = get_status("/unpair?uniqueid=nobody");
+  auto still_alive = get_status("/unpair?uniqueid=again");
+
+  server.stop();
+  server_thread.join();
+
+  REQUIRE(missing_id == 400);
+  REQUIRE(unknown_client == 400);
+  REQUIRE(still_alive == 400);
 }
