@@ -41,13 +41,13 @@ std::optional<enet_host> create_host(std::string_view host, std::uint16_t port, 
   enet_address_set_host(&addr, host.data());
   enet_address_set_port(&addr, port);
 
-  auto enet_host = enet_host_create(AF_INET, &addr, peers, 0, 0, 0);
-  if (enet_host == nullptr) {
+  auto raw_host = enet_host_create(AF_INET, &addr, peers, 0, 0, 0);
+  if (raw_host == nullptr) {
     logs::log(logs::error, "An error occurred while trying to create an ENet server host on port {}.", port);
     return std::nullopt;
   }
 
-  return {enet_host, free_host};
+  return enet_host{raw_host, free_host};
 }
 
 /**
