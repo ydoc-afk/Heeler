@@ -23,8 +23,8 @@ struct JSONSchema {
 template <typename T> std::string HTTPServer<T>::openapi_schema() const {
   OpenAPISchema schema = {};
 
-  schema.info["title"] = "Wolf API";
-  schema.info["description"] = "API for the Wolf server";
+  schema.info["title"] = "Heeler API";
+  schema.info["description"] = "API for the Heeler server";
   schema.info["version"] = "0.1";
 
   rfl::Object<rfl::Generic> server = {};

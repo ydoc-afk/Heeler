@@ -2,13 +2,13 @@
 
 == Overview
 
-Wolf will start different Docker containers that are preconfigured for different apps such as Steam, Pegasus or Firefox.
-Once the container is launched, Wolf streams the output to the connected Moonlight client.
+Heeler will start different Docker containers that are preconfigured for different apps such as Steam, Pegasus or Firefox.
+Once the container is launched, Heeler streams the output to the connected Moonlight client.
 
 Currently, when opening and closing the app through Moonlight, the app container will be deleted.
 Therefore, all data except for the mounted paths will be deleted, which ensures application consistency to some extent.
 However, if modifications to the container are needed, such as installing additional software, the best approach is to create a custom app image.
-Wolf uses the same app image as in the GoW project.
+Heeler uses the same app image as in the GoW project.
 Therefore, you can refer to this https://games-on-whales.github.io/gow/adding-an-app.html[link] for customizing app content.
 
 See each subpage for further details and additional configuration steps.
@@ -40,7 +40,7 @@ For example, say that you want to add another emulator to `ES-DE`:
 docker build -t gow/es-de:custom --build-arg BASE_APP_IMAGE=ghcr.io/games-on-whales/base-app:edge images/es-de .
 ----
 
-* Finally, update the `config.toml` file in Wolf to use the new image.
+* Finally, update the `config.toml` file in Heeler to use the new image.
 Just change the `image` field under `[apps.runner]` to the newly locally built `gow/es-de:custom`.
 * Don't forget to contribute back by creating a pull request in https://github.com/games-on-whales/gow[games-on-whales/gow]!
 
@@ -59,7 +59,7 @@ docker build -t gow/base-app --build-arg BASE_IMAGE=gow/base images/base-app .
 
 === Testing out an image locally
 
-If you have a desktop environment running on your host, you can run the built image without even using Wolf. +
+If you have a desktop environment running on your host, you can run the built image without even using Heeler. +
 Here's an example of running Steam inside Docker *on a Wayland host* without installing anything else on your host:
 
 [source,shell]
