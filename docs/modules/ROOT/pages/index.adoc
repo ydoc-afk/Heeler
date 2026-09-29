@@ -10,7 +10,7 @@ An intelligent wolf is better than a foolish lion.
 
 Heeler is an open source streaming server for https://moonlight-stream.org/[Moonlight] that allows you to share a single server with multiple remote clients in order to play videogames! +
 
-image:wolf-introduction.svg[Heeler introduction image]
+image:heeler.jpg[Heeler introduction image]
 
 It's made from the ground up with the following primary goals:
 

@@ -12,7 +12,7 @@
 Heeler is a streaming server for [Moonlight](https://moonlight-stream.org/) that allows you to share a single server with
 multiple remote clients in order to play videogames!
 
-![Heeler basic flow chart](https://github.com/games-on-whales/wolf/blob/stable/docs/modules/ROOT/images/wolf-introduction.svg?raw=true)
+![Heeler](docs/modules/ROOT/images/heeler.jpg)
 
 It's made from the ground up with the following primary goals:
 
