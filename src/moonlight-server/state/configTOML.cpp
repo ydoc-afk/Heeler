@@ -255,7 +255,7 @@ Config load_or_default(const std::string &source,
   // Only patch sources that actually start with the element name: blindly replacing the
   // first 12 characters corrupts custom source pipelines.
   auto ensure_interpipesrc_name = [](std::string &source, const char *kind) {
-    constexpr auto element = "interpipesrc";
+    constexpr std::string_view element = "interpipesrc";
     if (source.rfind(element, 0) == 0 && source.find("name=interpipesrc") == std::string::npos &&
         source.size() > element.size() && (source[element.size()] == ' ' || source[element.size()] == '!')) {
       logs::log(logs::debug, "Found interpipesrc without name, adding it");
