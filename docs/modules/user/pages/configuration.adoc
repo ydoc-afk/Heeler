@@ -4,22 +4,24 @@ Heeler is configured via a TOML config file and some additional optional ENV var
 
 == ENV variables
 
+The `WOLF_*` names are still accepted as deprecated aliases for backwards compatibility; when both are set, the `HEALER_*` name wins.
+
 |===
 |Variable |Default |Description
 
-|WOLF_LOG_LEVEL
+|HEALER_LOG_LEVEL
 |INFO
 |The log level to show, one of ERROR, WARNING, INFO, DEBUG, TRACE
 
-|WOLF_CFG_FILE
+|HEALER_CFG_FILE
 |/etc/wolf/cfg/config.toml
 |Full path to the config file
 
-|WOLF_PRIVATE_KEY_FILE
+|HEALER_PRIVATE_KEY_FILE
 |/etc/wolf/cfg/key.pem
 |Full path to the key.pem file
 
-|WOLF_PRIVATE_CERT_FILE
+|HEALER_PRIVATE_CERT_FILE
 |/etc/wolf/cfg/cert.pem
 |Full path to the cert.pem file
 
@@ -31,19 +33,19 @@ Heeler is configured via a TOML config file and some additional optional ENV var
 |_(unset)_
 |PulseAudio server Heeler streams audio from. Left unset, Heeler starts an embedded PulseAudio server inside its own container and uses that. Set it (e.g. to a host socket path) to stream from an external PulseAudio/PipeWire instead.
 
-|WOLF_PULSE_IMAGE
+|HEALER_PULSE_IMAGE
 |ghcr.io/games-on-whales/pulseaudio:master
 |Fallback only: the PulseAudio image Heeler spins up as a sidecar container if neither the embedded server nor `PULSE_SERVER` is reachable
 
-|WOLF_STOP_CONTAINER_ON_EXIT
+|HEALER_STOP_CONTAINER_ON_EXIT
 |TRUE
 |Set to False in order to avoid force stop and removal of containers when the connection is closed
 
-|WOLF_WAYLAND_SOCKET_WAIT_TIMEOUT_MS
+|HEALER_WAYLAND_SOCKET_WAIT_TIMEOUT_MS
 |5000
 |The time in milliseconds to wait for the Wayland socket to appear before starting the stream runner
 
-|WOLF_DOCKER_SOCKET
+|HEALER_DOCKER_SOCKET
 |/var/run/docker.sock
 |The full path to the docker socket, doesn't support tcp (yet)
 
@@ -55,19 +57,19 @@ Heeler is configured via a TOML config file and some additional optional ENV var
 |/etc/wolf
 |The base folder in the host where the running apps will store permanent state, if not set Heeler will automatically use the path that is mounted in the docker container
 
-|WOLF_RENDER_NODE
+|HEALER_RENDER_NODE
 |/dev/dri/renderD128
 |The default render node used for virtual desktops; see: <<_multiple_gpu>>
 
-|WOLF_DOCKER_FAKE_UDEV_PATH
+|HEALER_DOCKER_FAKE_UDEV_PATH
 |$HOST_APPS_STATE_FOLDER/fake-udev
 |The path on the host for the fake-udev CLI tool
 
-|WOLF_DEFAULT_RUN_UID
+|HEALER_DEFAULT_RUN_UID
 |1000
 |The default UID that apps run as, applied to newly paired clients; existing clients keep their saved values
 
-|WOLF_DEFAULT_RUN_GID
+|HEALER_DEFAULT_RUN_GID
 |1000
 |The default GID that apps run as, applied to newly paired clients; existing clients keep their saved values
 |===
@@ -480,7 +482,7 @@ If both are defined, Gamescoped is used. (see https://github.com/games-on-whales
 == Multiple GPUs
 
 When you have multiple GPUs installed in your host, you might want to specify which one to use for Heeler.
-Use the `WOLF_RENDER_NODE` environment variable (defaults to `/dev/dri/renderD128`) to control this.
+Use the `HEALER_RENDER_NODE` environment variable (defaults to `/dev/dri/renderD128`) to control this.
 
 [TIP]
 ====

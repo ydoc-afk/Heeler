@@ -2,7 +2,7 @@
 
 [TIP]
 ====
-When something doesn't work it'll be helpful to be able to see the logs from Heeler, please change the env variable `WOLF_LOG_LEVEL` to `DEBUG` and try to replicate the issue.
+When something doesn't work it'll be helpful to be able to see the logs from Heeler, please change the env variable `HEALER_LOG_LEVEL` to `DEBUG` and try to replicate the issue.
 ====
 
 == Black screen in Moonlight

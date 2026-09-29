@@ -32,7 +32,7 @@ Two supported paths, both documented in `docs/modules/dev/pages/manual_build.ado
   *Dev Containers: Clone Repository in Container Volume*, pick the Clang kit).
 - **Manual host build** — build Heeler outside Docker (Docker must still be installed for Heeler to do
   anything useful). The doc covers building GStreamer and `gst-wayland-display` from source, apt deps,
-  the required `LD_LIBRARY_PATH`/`PKG_CONFIG_PATH`/etc. env, and a `runwolf.sh` template of `WOLF_*`
+  the required `LD_LIBRARY_PATH`/`PKG_CONFIG_PATH`/etc. env, and a `runwolf.sh` template of `HEALER_*`
   runtime vars.
 
 Most C++ deps are fetched at configure time via CMake `FetchContent` (fmt, tomlplusplus, reflect-cpp,
@@ -85,7 +85,7 @@ See `docs/modules/dev/pages/how-it-works.adoc` for the full picture.
   [Gamescope](https://github.com/ValveSoftware/gamescope)) as a Wayland client inside it. The
   compositor has no XWayland; apps needing X (e.g. Steam) rely on Gamescope for it.
 - **Virtual audio** — by default PulseAudio runs **inside the Heeler container** under supervisord
-  (`docker/startup.sh` sets `WOLF_EMBED_PULSE=true`; Heeler waits for the PA socket before starting). With
+  (`docker/startup.sh` sets `HEALER_EMBED_PULSE=true`; Heeler waits for the PA socket before starting). With
   an external `PULSE_SERVER`, or if `pulseaudio` isn't installed, Heeler falls back to the legacy
   standalone `WolfPulseAudio` sidecar. Either way it uses `libpulse` for per-session virtual sinks.
 - **Virtual input** — mouse/keyboard events go **directly to the Wayland compositor** (no host device);
@@ -103,11 +103,11 @@ See `docs/modules/dev/pages/how-it-works.adoc` for the full picture.
   the `nvidia` runtime), passes through Heeler's virtual input devices, sets `DeviceCgroupRules` for the
   dynamic `hidraw`/`input` majors (needed for the virtual DualSense), and wires up fake-udev. It then
   blocks for the container's lifetime plugging/unplugging devices via the event bus, and on exit
-  stops/removes it (`WOLF_STOP_CONTAINER_ON_EXIT`) and cleans up the udev scratch dir.
+  stops/removes it (`HEALER_STOP_CONTAINER_ON_EXIT`) and cleans up the udev scratch dir.
 - **Streaming** — GStreamer encodes video/audio (HW accel via CUDA/QuickSync/VAAPI; the whole pipeline
   is a config-string in `config.toml`, overridable without code). Custom plugins in `gst-plugin/`
   (`rtpmoonlightpay_video`/`_audio`) split, RTP-encode, and add FEC to Moonlight's format. The pipeline
-  is zero-copy from framebuffer to encoded frames — on by default, disable with `WOLF_USE_ZERO_COPY=FALSE`
+  is zero-copy from framebuffer to encoded frames — on by default, disable with `HEALER_USE_ZERO_COPY=FALSE`
   (auto-falls back to legacy when an encoder can't support it); see
   [The road to zero-copy in Wolf](https://abeltra.me/blog/road-to-zero-copy-in-wolf/).
 
@@ -143,9 +143,12 @@ See `docs/modules/dev/pages/how-it-works.adoc` for the full picture.
 
 ## Runtime configuration (env vars)
 
-Behavior is driven by `WOLF_*` env vars read via `utils::get_env` (full working set in `wolf.cpp` and
-`.devcontainer/devcontainer.json`): `WOLF_CFG_FILE`, `WOLF_PRIVATE_KEY_FILE`/`WOLF_PRIVATE_CERT_FILE`,
-`WOLF_LOG_LEVEL`, `WOLF_DOCKER_SOCKET`, `WOLF_RENDER_NODE`/`WOLF_ENCODER_NODE` (GPU DRI nodes),
-`WOLF_PULSE_IMAGE`, `WOLF_INTERNAL_IP`/`WOLF_INTERNAL_MAC`, `WOLF_USE_ZERO_COPY`,
-`WOLF_STOP_CONTAINER_ON_EXIT`. A few (e.g. `WOLF_EMBED_PULSE`, `PULSE_SERVER`) are set/consumed by
-`docker/startup.sh` + `supervisord.conf`, not by Heeler itself.
+Behavior is driven by `HEALER_*` env vars read via `utils::get_env` (full working set in `wolf.cpp` and
+`.devcontainer/devcontainer.json`): `HEALER_CFG_FILE`, `HEALER_PRIVATE_KEY_FILE`/`HEALER_PRIVATE_CERT_FILE`,
+`HEALER_LOG_LEVEL`, `HEALER_DOCKER_SOCKET`, `HEALER_RENDER_NODE`/`HEALER_ENCODER_NODE` (GPU DRI nodes),
+`HEALER_PULSE_IMAGE`, `HEALER_INTERNAL_IP`/`HEALER_INTERNAL_MAC`, `HEALER_USE_ZERO_COPY`,
+`HEALER_STOP_CONTAINER_ON_EXIT`. The legacy `WOLF_*` names are still accepted as deprecated aliases
+(`HEALER_*` wins when both are set). A few (e.g. `HEALER_EMBED_PULSE`, `PULSE_SERVER`) are set/consumed
+by `docker/startup.sh` + `supervisord.conf`, not by Heeler itself. Container-boundary vars that guest apps
+read (`WOLF_SOCKET_PATH`, `WOLF_SESSION_ID`, `WOLF_VIDEO_BUFFER_CAPS`) intentionally keep the `WOLF_`
+prefix.

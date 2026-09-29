@@ -458,7 +458,7 @@ And if you have a multi GPU setup, don't forget to set the below env variable
 [source]
 ----
 environment:
-    - WOLF_RENDER_NODE=/dev/dri/renderD12X
+    - HEALER_RENDER_NODE=/dev/dri/renderD12X
 ----
 
 --
@@ -556,9 +556,9 @@ Volume=/dev/:/dev/:rw
 Volume=/run/udev:/run/udev:rw
 Volume=/etc/wolf/:/etc/wolf:z
 Volume=/run/podman/podman.sock:/var/run/docker.sock:ro
-Environment=WOLF_STOP_CONTAINER_ON_EXIT=TRUE
+Environment=HEALER_STOP_CONTAINER_ON_EXIT=TRUE
 Environment=NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
-Environment=WOLF_RENDER_NODE=/dev/dri/renderD129
+Environment=HEALER_RENDER_NODE=/dev/dri/renderD129
 
 [Install]
 WantedBy=multi-user.target
@@ -583,10 +583,10 @@ Y
 ....
 ====
 
-.Multiple GPUs / finding the device ID for WOLF_RENDER_NODE
+.Multiple GPUs / finding the device ID for HEALER_RENDER_NODE
 [%collapsible]
 ====
-If you have a multi GPU setup, you need to set the `WOLF_RENDER_NODE` environmnet variable to the correct card. You can find a list of attached graphics cards with:
+If you have a multi GPU setup, you need to set the `HEALER_RENDER_NODE` environmnet variable to the correct card. You can find a list of attached graphics cards with:
 
 [source,bash]
 ....
@@ -630,7 +630,7 @@ Volume=/dev/:/dev/:rw
 Volume=/run/udev:/run/udev:rw
 Volume=/etc/wolf/:/etc/wolf:z
 Volume=/run/podman/podman.sock:/var/run/docker.sock:ro
-Environment=WOLF_STOP_CONTAINER_ON_EXIT=TRUE
+Environment=HEALER_STOP_CONTAINER_ON_EXIT=TRUE
 
 [Install]
 WantedBy=multi-user.target
@@ -682,12 +682,12 @@ EXPOSE 48200/udp
 
 These are the default values, if you want to assign custom ports you can set the env variables:
 
-* `WOLF_HTTP_PORT`
-* `WOLF_HTTPS_PORT`
-* `WOLF_CONTROL_PORT`
-* `WOLF_RTSP_SETUP_PORT`
-* `WOLF_VIDEO_PING_PORT`
-* `WOLF_AUDIO_PING_PORT`
+* `HEALER_HTTP_PORT`
+* `HEALER_HTTPS_PORT`
+* `HEALER_CONTROL_PORT`
+* `HEALER_RTSP_SETUP_PORT`
+* `HEALER_VIDEO_PING_PORT`
+* `HEALER_AUDIO_PING_PORT`
 
 ====
 
@@ -698,8 +698,8 @@ and you can change it per client later from xref:wolf-ui.adoc[]. If your host
 uses a different convention (for example Unraid, where `nobody` is `99:100`),
 set the defaults for every new client with the environment variables:
 
-* `WOLF_DEFAULT_RUN_UID`
-* `WOLF_DEFAULT_RUN_GID`
+* `HEALER_DEFAULT_RUN_UID`
+* `HEALER_DEFAULT_RUN_GID`
 
 These only affect the defaults applied to *new* clients; existing clients keep
 their saved values.
