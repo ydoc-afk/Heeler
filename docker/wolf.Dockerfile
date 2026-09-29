@@ -116,7 +116,7 @@ COPY --from=wolf-builder /usr/local/lib/liblibgstwaylanddisplay* /usr/local/lib/
 
 WORKDIR /wolf
 
-ENV WOLF_CFG_FOLDER=/etc/wolf/cfg
+ENV HEALER_CFG_FOLDER=/etc/wolf/cfg
 
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 COPY --from=wolf-builder /wolf/fake-udev /wolf/fake-udev
@@ -124,18 +124,18 @@ COPY --from=wolf-builder /wolf/fake-udev /wolf/fake-udev
 ENV GST_GL_API=gles2 \
     GST_GL_PLATFORM=egl \
     GST_GL_WINDOW=surfaceless \
-    WOLF_USE_ZERO_COPY=TRUE \
-    WOLF_LOG_LEVEL=INFO \
-    WOLF_CFG_FILE=$WOLF_CFG_FOLDER/config.toml \
-    WOLF_PRIVATE_KEY_FILE=$WOLF_CFG_FOLDER/key.pem \
-    WOLF_PRIVATE_CERT_FILE=$WOLF_CFG_FOLDER/cert.pem \
-    WOLF_PULSE_IMAGE=ghcr.io/games-on-whales/pulseaudio:master \
-    WOLF_RENDER_NODE=/dev/dri/renderD128 \
-    WOLF_STOP_CONTAINER_ON_EXIT=TRUE \
-    WOLF_WAYLAND_SOCKET_WAIT_TIMEOUT_MS=5000 \
-    WOLF_DOCKER_SOCKET=/var/run/docker.sock \
-    WOLF_DEFAULT_RUN_UID=1000 \
-    WOLF_DEFAULT_RUN_GID=1000 \
+    HEALER_USE_ZERO_COPY=TRUE \
+    HEALER_LOG_LEVEL=INFO \
+    HEALER_CFG_FILE=$HEALER_CFG_FOLDER/config.toml \
+    HEALER_PRIVATE_KEY_FILE=$HEALER_CFG_FOLDER/key.pem \
+    HEALER_PRIVATE_CERT_FILE=$HEALER_CFG_FOLDER/cert.pem \
+    HEALER_PULSE_IMAGE=ghcr.io/games-on-whales/pulseaudio:master \
+    HEALER_RENDER_NODE=/dev/dri/renderD128 \
+    HEALER_STOP_CONTAINER_ON_EXIT=TRUE \
+    HEALER_WAYLAND_SOCKET_WAIT_TIMEOUT_MS=5000 \
+    HEALER_DOCKER_SOCKET=/var/run/docker.sock \
+    HEALER_DEFAULT_RUN_UID=1000 \
+    HEALER_DEFAULT_RUN_GID=1000 \
     RUST_BACKTRACE=full \
     RUST_LOG=WARN \
     HOST_APPS_STATE_FOLDER=/etc/wolf \

@@ -8,6 +8,7 @@
 #include <sstream>
 #include <stdlib.h>
 #include <string>
+#include <cstdio>
 
 namespace utils {
 
@@ -57,8 +58,26 @@ inline std::string to_string(std::string_view str) {
   return {str.begin(), str.end()};
 }
 
+/**
+ * Returns the value of the env var `tag`, or `def` if it's not set.
+ *
+ * HEALER_* names transparently fall back to their legacy WOLF_* equivalents, so
+ * existing deployments keep working after the rebrand. The HEALER_* name always
+ * wins when both are set.
+ */
 inline const char *get_env(const char *tag, const char *def = nullptr) noexcept {
   const char *ret = std::getenv(tag);
+  if (ret)
+    return ret;
+  // Legacy WOLF_* fallback for HEALER_* names (rebrand from Wolf to Heeler)
+  if (tag[0] == 'H' && tag[1] == 'E' && tag[2] == 'A' && tag[3] == 'L' && tag[4] == 'E' && tag[5] == 'R' &&
+      tag[6] == '_') {
+    static thread_local char legacy[128];
+    std::snprintf(legacy, sizeof(legacy), "WOLF_%s", tag + 7);
+    ret = std::getenv(legacy);
+    if (ret)
+      logs::log(logs::debug, "Env var WOLF_{} is deprecated, use HEALER_{} instead", tag + 7, tag + 7);
+  }
   return ret ? ret : def;
 }
 
