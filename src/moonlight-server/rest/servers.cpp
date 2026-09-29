@@ -59,11 +59,25 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     SimpleWeb::CaseInsensitiveMultimap headers = req->parse_query_string();
     auto client_id = get_header(headers, "uniqueid");
     auto client_ip = req->remote_endpoint().address().to_string();
+
+    // This endpoint is unauthenticated, so validate the input and answer with 400
+    // instead of throwing out of the handler (which would terminate the process)
+    if (!client_id.has_value()) {
+      logs::log(logs::warning, "[HTTP] /unpair request without a 'uniqueid' parameter from {}", client_ip);
+      endpoints::server_error<SimpleWeb::HTTP>(resp);
+      return;
+    }
     auto cache_key = client_id.value() + "@" + client_ip;
 
     logs::log(logs::info, "Unpairing: {}", cache_key);
-    auto client = state->pairing_cache->load()->at(cache_key);
-    state::unpair(state->config, state::PairedClient{.client_cert = client.client_cert});
+    auto cache = state->pairing_cache->load();
+    auto it = cache.find(cache_key);
+    if (it == cache.end()) {
+      logs::log(logs::warning, "[HTTP] /unpair request for unknown client: {}", cache_key);
+      endpoints::server_error<SimpleWeb::HTTP>(resp);
+      return;
+    }
+    state::unpair(state->config, state::PairedClient{.client_cert = it->second.client_cert});
 
     XML xml;
     xml.put("root.<xmlattr>.status_code", 200);
