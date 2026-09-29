@@ -384,7 +384,7 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                      "Host: 00.11.22.33.44\n"
                      "Session:  DEADBEEFCAFE\n"
                      "Content-type: application/sdp\n"
-                     "Content-length: 1308"
+                     "Content-length: 1307"
                      "\r\n\r\n" // start of payload
                      "v=0\n"
                      "o=android 0 14 IN IPv4 0.0.0.0\n"
@@ -570,7 +570,7 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                      "Host: 0.0.0.0\n"
                      "Session:  DEADBEEFCAFE\n"
                      "Content-type: application/sdp\n"
-                     "Content-length: 1308"
+                     "Content-length: 1307"
                      "\r\n\r\n" // start of payload
                      "v=0\n"
                      "o=android 0 14 IN IPv4 0.0.0.0\n"
