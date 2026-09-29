@@ -251,16 +251,19 @@ Config load_or_default(const std::string &source,
 
   auto default_gst_video_settings = cfg.gstreamer.video;
   auto default_gst_audio_settings = cfg.gstreamer.audio;
-  if (default_gst_video_settings.default_source.find("name=interpipesrc") == std::string::npos) {
-    logs::log(logs::debug, "Found interpipesrc without name, adding it");
-    default_gst_video_settings.default_source =
-        default_gst_video_settings.default_source.replace(0, 12, "interpipesrc name=interpipesrc_{}_video");
-  }
-  if (default_gst_audio_settings.default_source.find("name=interpipesrc") == std::string::npos) {
-    logs::log(logs::debug, "Found interpipesrc without name, adding it");
-    default_gst_audio_settings.default_source =
-        default_gst_audio_settings.default_source.replace(0, 12, "interpipesrc name=interpipesrc_{}_audio");
-  }
+  // Migrated v4/v5 configs (and user configs) may use a bare `interpipesrc` without a name.
+  // Only patch sources that actually start with the element name: blindly replacing the
+  // first 12 characters corrupts custom source pipelines.
+  auto ensure_interpipesrc_name = [](std::string &source, const char *kind) {
+    constexpr auto element = "interpipesrc";
+    if (source.rfind(element, 0) == 0 && source.find("name=interpipesrc") == std::string::npos &&
+        source.size() > element.size() && (source[element.size()] == ' ' || source[element.size()] == '!')) {
+      logs::log(logs::debug, "Found interpipesrc without name, adding it");
+      source.insert(element.size(), std::string(" name=interpipesrc_{}_") + kind);
+    }
+  };
+  ensure_interpipesrc_name(default_gst_video_settings.default_source, "video");
+  ensure_interpipesrc_name(default_gst_audio_settings.default_source, "audio");
 
   auto default_gst_encoder_settings = default_gst_video_settings.defaults;
   bool use_zero_copy = utils::get_env("WOLF_USE_ZERO_COPY", "") != std::string("FALSE");
@@ -419,8 +422,13 @@ void pair(const Config &cfg, const PairedClient &client) {
     return filtered_clients.push_back(client);
   });
 
-  // Update TOML
+  // Update TOML (deduplicate first: re-pairing the same client must not
+  // accumulate duplicate entries in config.toml, mirroring the atom update above)
   auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
+  tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
+                                          tml.paired_clients.end(),
+                                          [&client](const auto &v) { return v.client_cert == client.client_cert; }),
+                           tml.paired_clients.end());
   tml.paired_clients.push_back(client);
   rfl::toml::save(cfg.config_source, tml);
 }
