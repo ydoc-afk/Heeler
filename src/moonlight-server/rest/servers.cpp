@@ -24,7 +24,7 @@ using namespace wolf::core;
  * (common on LANs without PTR records), the page then falls back to the IP.
  */
 std::string get_hostname(const std::string &ip) {
-  struct addrinfo hints{};
+  struct addrinfo hints {};
   struct addrinfo *result = nullptr;
   hints.ai_family = AF_INET;
   hints.ai_flags = AI_CANONNAME;
