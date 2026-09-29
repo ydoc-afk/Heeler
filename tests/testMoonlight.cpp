@@ -528,13 +528,17 @@ TEST_CASE("Multiple users", "[HTTP]") {
   auto app1 = events::App{.base = moonlight::App{.title = "test_app"}};
   auto client1_ip = "0.0.0.0";
   auto client1_headers = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}};
-  auto session1 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  auto session1_opt = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session1_opt.has_value());
+  auto session1 = session1_opt.value();
 
   REQUIRE(session1->video_stream_port == 48100);
   REQUIRE(session1->audio_stream_port == 48200);
 
   app_state.running_sessions->update([session1](auto &sessions) { return sessions.push_back(*session1); });
-  auto session2 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  auto session2_opt = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session2_opt.has_value());
+  auto session2 = session2_opt.value();
 
   REQUIRE(session2->video_stream_port == 48100);
   REQUIRE(session2->audio_stream_port == 48200);
@@ -543,7 +547,9 @@ TEST_CASE("Multiple users", "[HTTP]") {
   app_state.running_sessions->update(
       [session2](auto &sessions) { return immer::vector<events::StreamSession>{*session2}; });
   // We should now assign back the now available [48100, 48200] ports
-  auto session3 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  auto session3_opt = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session3_opt.has_value());
+  auto session3 = session3_opt.value();
 
   REQUIRE(session3->video_stream_port == 48100);
   REQUIRE(session3->audio_stream_port == 48200);
@@ -553,8 +559,20 @@ TEST_CASE("Multiple users", "[HTTP]") {
     return immer::vector<events::StreamSession>{*session1, *session2, *session3};
   });
   // We should now assign the 2nd port (even if we have 3 sessions) because of port clash
-  auto session4 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  auto session4_opt = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session4_opt.has_value());
+  auto session4 = session4_opt.value();
 
   REQUIRE(session4->video_stream_port == 48100);
   REQUIRE(session4->audio_stream_port == 48200);
+
+  // Missing rikey/rikeyid must yield nullopt, not a crash
+  auto no_keys = SimpleWeb::CaseInsensitiveMultimap{};
+  REQUIRE_FALSE(endpoints::https::create_run_session(no_keys, client1_ip, client1, app_state, app1).has_value());
+
+  // Malformed mode/surroundAudioInfo must not crash, falls back to the defaults
+  auto bad_mode =
+      SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}, {"mode", "abc"}, {"surroundAudioInfo", "xyz"}};
+  auto bad_mode_session = endpoints::https::create_run_session(bad_mode, client1_ip, client1, app_state, app1);
+  REQUIRE(bad_mode_session.has_value());
 }

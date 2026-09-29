@@ -62,7 +62,14 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
   bool is_https = std::is_same_v<SimpleWeb::HTTPS, T>;
 
   bool is_busy = stream_session.has_value();
-  int app_id = stream_session.has_value() ? std::stoi(stream_session->app->base.id) : 0;
+  int app_id = 0;
+  if (stream_session) {
+    try {
+      app_id = std::stoi(stream_session->app->base.id);
+    } catch (const std::exception &) {
+      logs::log(logs::warning, "[HTTP] Non-numeric app id '{}' in running session", stream_session->app->base.id);
+    }
+  }
 
   auto local_ip = get_host_ip<T>(request, state);
 
@@ -327,8 +334,13 @@ void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>:
              const immer::box<state::AppState> &state) {
   log_req<SimpleWeb::HTTPS>(request);
 
-  immer::vector<immer::box<events::App>> moonlight_apps =
-      state::get_moonlight_profile(state->config).value()->apps->load();
+  auto profile = state::get_moonlight_profile(state->config);
+  if (!profile || !profile.value()->apps) {
+    logs::log(logs::warning, "[HTTPS] No moonlight profile configured, can't list apps");
+    server_error<SimpleWeb::HTTPS>(response);
+    return;
+  }
+  immer::vector<immer::box<events::App>> moonlight_apps = profile.value()->apps->load();
   auto base_apps = moonlight_apps                                                        //
                    | ranges::views::transform([](const auto &app) { return app->base; }) //
                    | ranges::to<immer::vector<moonlight::App>>();
@@ -368,31 +380,47 @@ void appasset(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>
   }
 }
 
-auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
-                        const std::string &client_ip,
-                        const state::PairedClient &current_client,
-                        immer::box<state::AppState> state,
-                        const events::App &run_app) {
+std::optional<std::shared_ptr<events::StreamSession>> create_run_session(
+    const SimpleWeb::CaseInsensitiveMultimap &headers,
+    const std::string &client_ip,
+    const state::PairedClient &current_client,
+    immer::box<state::AppState> state,
+    const events::App &run_app) {
+  auto rikey = get_header(headers, "rikey");
+  auto rikeyid = get_header(headers, "rikeyid");
+  if (!rikey || !rikeyid) {
+    logs::log(logs::warning, "[HTTPS] launch/resume request missing rikey/rikeyid");
+    return std::nullopt;
+  }
+
+  // mode is untrusted input ("1920x1080x60"): fall back to the default on anything malformed
   auto display_mode_str = utils::split(get_header(headers, "mode").value_or("1920x1080x60"), 'x');
-  moonlight::DisplayMode display_mode = {std::stoi(display_mode_str[0].data()),
-                                         std::stoi(display_mode_str[1].data()),
-                                         std::stoi(display_mode_str[2].data()),
-                                         state->config->support_hevc,
-                                         state->config->support_av1};
+  moonlight::DisplayMode display_mode = {1920, 1080, 60, state->config->support_hevc, state->config->support_av1};
+  try {
+    if (display_mode_str.size() == 3) {
+      display_mode = {std::stoi(display_mode_str[0].data()),
+                      std::stoi(display_mode_str[1].data()),
+                      std::stoi(display_mode_str[2].data()),
+                      state->config->support_hevc,
+                      state->config->support_av1};
+    }
+  } catch (const std::exception &) {
+    logs::log(logs::warning, "[HTTPS] Invalid mode header, falling back to 1920x1080x60");
+  }
 
-  auto surround_info = std::stoi(get_header(headers, "surroundAudioInfo").value_or("196610"));
-  int channelCount = surround_info & (0xffff /* last 16 bits */);
+  int channelCount = 2;
+  try {
+    auto surround_info = std::stoi(get_header(headers, "surroundAudioInfo").value_or("196610"));
+    channelCount = surround_info & (0xffff /* last 16 bits */);
+  } catch (const std::exception &) {
+    logs::log(logs::warning, "[HTTPS] Invalid surroundAudioInfo header, falling back to stereo");
+  }
 
-  auto base_session = create_stream_session(state,
-                                            run_app,
-                                            current_client,
-                                            display_mode,
-                                            channelCount,
-                                            get_header(headers, "rikey").value(),
-                                            get_header(headers, "rikeyid").value());
+  auto base_session =
+      create_stream_session(state, run_app, current_client, display_mode, channelCount, rikey.value(), rikeyid.value());
 
   base_session->ip = client_ip;
-  return std::move(base_session);
+  return base_session;
 }
 
 std::string get_rtsp_ip_string(const std::string &local_ip, const events::StreamSession &session) {
@@ -413,7 +441,13 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   log_req<SimpleWeb::HTTPS>(request);
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
-  auto app = state::get_moonlight_app_by_id(state->config, get_header(headers, "appid").value());
+  auto app_id = get_header(headers, "appid");
+  if (!app_id) {
+    logs::log(logs::warning, "[HTTP] launch request missing appid");
+    server_error<SimpleWeb::HTTPS>(response);
+    return;
+  }
+  auto app = state::get_moonlight_app_by_id(state->config, app_id.value());
   if (!app) {
     logs::log(logs::warning, "[HTTP] Requested wrong app_id: not found");
     server_error<SimpleWeb::HTTPS>(response);
@@ -430,6 +464,10 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
 
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
   auto new_session = create_run_session(request->parse_query_string(), client_ip, current_client, state, app.value());
+  if (!new_session) {
+    server_error<SimpleWeb::HTTPS>(response);
+    return;
+  }
   state->event_bus->fire_event(immer::box<events::StreamSession>(*new_session));
   state->running_sessions->update(
       [new_session](const immer::vector<events::StreamSession> &ses_v) { return ses_v.push_back(*new_session); });
@@ -450,6 +488,10 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   if (old_session) {
     auto new_session =
         create_run_session(request->parse_query_string(), client_ip, current_client, state, *old_session->app);
+    if (!new_session) {
+      server_error<SimpleWeb::HTTPS>(response);
+      return;
+    }
     // Carry over the old session display handle
     new_session->wayland_display = std::move(old_session->wayland_display);
     // Carry over the old session devices, they'll be already plugged into the container
@@ -468,9 +510,8 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
     send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
   } else {
     logs::log(logs::warning, "[HTTPS] Received resume event from an unregistered session, ip: {}", client_ip);
+    server_error<SimpleWeb::HTTPS>(response);
   }
-
-  server_error<SimpleWeb::HTTPS>(response);
 }
 
 void cancel(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
