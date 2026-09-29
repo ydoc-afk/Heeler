@@ -198,7 +198,7 @@ void w_display_create_window(WClientState &w_state) {
   xdg_surface_add_listener(xdg_surface_ptr, &xdg_surface_listener, &w_state);
 
   auto xdg_toplevel = xdg_surface_get_toplevel(w_state.xsurface.get());
-  xdg_toplevel_set_title(xdg_toplevel, "Wolf Wayland Client");
+  xdg_toplevel_set_title(xdg_toplevel, "Heeler Wayland Client");
   xdg_toplevel_set_app_id(xdg_toplevel, "wolf-client");
 
   wl_surface_commit(surface);

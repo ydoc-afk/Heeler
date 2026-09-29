@@ -31,7 +31,7 @@ struct ClientSettings {
   float h_scroll_acceleration = 1.0;
   /* Motion-capable virtual pad override. When `controllers_override[slot]`
    * is unset, the client advertises GYRO/ACCELEROMETER, AND this is
-   * anything other than `AUTO`, Wolf creates this controller type
+   * anything other than `AUTO`, Heeler creates this controller type
    * instead of the auto-detected one. `AUTO` (default) defers to the
    * auto-detection logic (which promotes UNKNOWN-with-motion clients
    * to PS so motion routes — see `create_new_joypad` in

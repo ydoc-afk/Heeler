@@ -2,7 +2,7 @@
 
 https://github.com/PrismLauncher/PrismLauncher[Prism Launcher] is a custom launcher for *Minecraft* that allows you to easily manage multiple installations of Minecraft at once.
 
-== How to use in Wolf
+== How to use in Heeler
 
 Just add the following entry to your `config.toml`
 

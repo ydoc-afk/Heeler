@@ -1,5 +1,5 @@
 {
-  "name": "wolf-dev",
+  "name": "heeler-dev",
   "build": {
     "context": "..",
     "dockerfile": "../docker/wolf.Dockerfile",

@@ -1,6 +1,6 @@
 = Quickstart
 
-Wolf runs as a single container, it'll spin up and down additional containers on-demand.
+Heeler runs as a single container, it'll spin up and down additional containers on-demand.
 
 == Docker
 
@@ -364,10 +364,10 @@ WSL2::
 
 [WARNING,caption=EXPERIMENTAL"]
 ====
-Running Wolf in WSL2 hasn't been properly tested.
+Running Heeler in WSL2 hasn't been properly tested.
 ====
 
-You can run Wolf in a very unprivileged setting without `uinput/uhid`, unfortunately this means that you'll be restricted to *only using mouse and keyboard*.
+You can run Heeler in a very unprivileged setting without `uinput/uhid`, unfortunately this means that you'll be restricted to *only using mouse and keyboard*.
 
 [WARNING]
 ====
@@ -393,7 +393,7 @@ Proxmox LXC::
 
 [WARNING,caption=WARNING]
 ====
-At the moment it is only possible to run Wolf inside a privileged LXC.
+At the moment it is only possible to run Heeler inside a privileged LXC.
 ====
 
 First you need to make sure your GPU drivers are installed and loaded on your PVE host.
@@ -466,9 +466,9 @@ Podman Quadlets::
 +
 --
 
-The easiest way to run Wolf is to use a `rootful` service, this isn't a strict requirement; if you give access to the `/dev/dri` devices, `/etc/wolf` and install the required udev rules everything should work.
+The easiest way to run Heeler is to use a `rootful` service, this isn't a strict requirement; if you give access to the `/dev/dri` devices, `/etc/wolf` and install the required udev rules everything should work.
 
-Place your `wolf.container` file (populated with either the Nvidia or Intel/AMD examples below) in `/etc/containers/systemd`, then run `sudo systemctl daemon-reload` and `sudo systemctl start wolf.service` to start Wolf.
+Place your `wolf.container` file (populated with either the Nvidia or Intel/AMD examples below) in `/etc/containers/systemd`, then run `sudo systemctl daemon-reload` and `sudo systemctl start wolf.service` to start Heeler.
 
 **Nvidia**
 
@@ -522,7 +522,7 @@ drwxr-xr-x. 7 root root   77 Oct 27 22:07 share
 [source,bash]
 ....
 [Unit]
-Description=Wolf / Games On Whales
+Description=Heeler / Games On Whales
 Requires=network-online.target podman.socket
 After=network-online.target podman.socket
 
@@ -604,7 +604,7 @@ lrwxrwxrwx. 1 root root 0 Oct 29 19:44 /sys/class/drm/renderD129/device/driver -
 [source,bash]
 ....
 [Unit]
-Description=Wolf / Games On Whales
+Description=Heeler / Games On Whales
 Requires=network-online.target podman.socket
 After=network-online.target podman.socket
 
@@ -659,7 +659,7 @@ Make a note of where the socket is running (e.g `/run/podman/podman.sock` in the
 --
 ======
 
-.Which ports are used by Wolf?
+.Which ports are used by Heeler?
 [%collapsible]
 ====
 To keep things simple the scripts above defaulted to `network:host`; that's not really required, the minimum set of ports that needs to be exposed are:
@@ -710,13 +710,13 @@ their saved values.
 You should now be able to point Moonlight to the IP address of the server and start the pairing process:
 
 * In Moonlight, you'll get a prompt for a PIN image:ROOT:moonlight-pairing-code.png[A screenshot of Moonlight asking for a PIN]
-* Wolf will log a line with a link to a page where you can input that PIN (ex: http://localhost:47989/pin/#337327E8A6FC0C66 make sure to replace `localhost` with your server IP) image:ROOT:wolf-pairing-code.png[A screenshot of the Wolf page where you can insert the PIN]
-* In Moonlight, you should now be able to see a list of the applications that are supported by Wolf, the default entrypoint is xref:wolf-ui.adoc[] image:ROOT:moonlight-pairing-done.png[A screenshot of Moonlight showing the apps]
+* Heeler will log a line with a link to a page where you can input that PIN (ex: http://localhost:47989/pin/#337327E8A6FC0C66 make sure to replace `localhost` with your server IP) image:ROOT:wolf-pairing-code.png[A screenshot of the Heeler page where you can insert the PIN]
+* In Moonlight, you should now be able to see a list of the applications that are supported by Heeler, the default entrypoint is xref:wolf-ui.adoc[] image:ROOT:moonlight-pairing-done.png[A screenshot of Moonlight showing the apps]
 
 [TIP]
 ====
-If you can only see a *black screen* with a cursor in Moonlight it's because the first time that you start an app Wolf will download the corresponding docker image + first time updates. +
-Keep an eye on the logs from Wolf to get more details.
+If you can only see a *black screen* with a cursor in Moonlight it's because the first time that you start an app Heeler will download the corresponding docker image + first time updates. +
+Keep an eye on the logs from Heeler to get more details.
 ====
 
 [#_virtual_devices_support]
@@ -732,7 +732,7 @@ crw------- 1 root root 10, 223 Jan 17 09:08 /dev/uinput
 
 The `udev` rules live in
 https://github.com/games-on-whales/wolf/blob/stable/85-wolf.rules[`85-wolf.rules`]
-in the Wolf repository; that file is the single source of truth, so install it
+in the Heeler repository; that file is the single source of truth, so install it
 directly rather than copying the rules by hand:
 
 [source,bash]
@@ -741,7 +741,7 @@ curl -fsSL https://raw.githubusercontent.com/games-on-whales/wolf/stable/85-wolf
   -o /etc/udev/rules.d/85-wolf.rules
 ....
 
-They grant Wolf access to `/dev/uinput` and `/dev/uhid` (needed to create the
+They grant Heeler access to `/dev/uinput` and `/dev/uhid` (needed to create the
 virtual gamepads and to emulate the DualSense), and they keep the virtual
 controllers off the host's active seat so a streamed controller can't also drive
 the host desktop -- see https://github.com/games-on-whales/wolf/issues/451.
@@ -753,4 +753,4 @@ Reload the udev rules either by rebooting or run:
 udevadm control --reload-rules && udevadm trigger
 ....
 
-Also restart Wolf container if it's already running.
+Also restart Heeler container if it's already running.

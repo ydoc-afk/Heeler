@@ -86,7 +86,7 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
         introspect::get_host_path_for(*container, host_xdg_runtime_dir).value_or(host_xdg_runtime_dir);
   } else {
     logs::log(logs::warning,
-              "Unable to get the container that is running Wolf, automatic mounts matching is disabled.");
+              "Unable to get the container that is running Heeler, automatic mounts matching is disabled.");
   }
 
   return {state::DISPLAY_CONFIGURATIONS,
@@ -214,7 +214,7 @@ void run() {
   rtp::start_rtp_ping(state::get_port(state::VIDEO_PING_PORT),
                       state::get_port(state::AUDIO_PING_PORT),
                       local_state->event_bus);
-  // Wolf API server
+  // Heeler API server
   std::thread([local_state, runtime_dir]() { wolf::api::start_server(runtime_dir, local_state); }).detach();
 
   // mDNS

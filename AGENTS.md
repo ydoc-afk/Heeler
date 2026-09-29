@@ -1,6 +1,6 @@
-## What Wolf is
+## What Heeler is
 
-Wolf is a low-latency streaming server for [Moonlight](https://moonlight-stream.org/) that lets multiple
+Heeler is a low-latency streaming server for [Moonlight](https://moonlight-stream.org/) that lets multiple
 remote clients share a single Linux host to play games. Each client gets an on-demand virtual desktop
 (Wayland compositor, no physical monitor needed) whose apps run in isolated Docker/Podman containers.
 It implements the Moonlight protocol (pairing over HTTPS, RTSP handshake, ENet control channel, RTP
@@ -8,11 +8,11 @@ video/audio) and hands video/audio off to GStreamer pipelines. Linux + Docker fi
 
 ## Companion repositories
 
-Wolf is split across three repos; the other two are integral and pulled in at build time — when
+Heeler is split across three repos; the other two are integral and pulled in at build time — when
 touching virtual input or virtual-display behavior, the real implementation often lives there:
 
 - **[games-on-whales/inputtino](https://github.com/games-on-whales/inputtino)** — virtual input device
-  library (`uinput`/`uhid`). Wolf uses it for gamepads (incl. gyro/accel) and pen/touch; mouse and
+  library (`uinput`/`uhid`). Heeler uses it for gamepads (incl. gyro/accel) and pen/touch; mouse and
   keyboard don't go through it (see Architecture). Surfaced via `src/core/.../input.hpp`.
 - **[games-on-whales/gst-wayland-display](https://github.com/games-on-whales/gst-wayland-display)** —
   the custom micro Wayland compositor (Rust, built on [Smithay](https://github.com/Smithay/smithay);
@@ -30,7 +30,7 @@ Two supported paths, both documented in `docs/modules/dev/pages/manual_build.ado
 - **Devcontainer (recommended)** — `docker/wolf.Dockerfile` target `wolf-builder` via `.devcontainer/`,
   so you build in the exact environment of the official image with all deps preinstalled (VS Code:
   *Dev Containers: Clone Repository in Container Volume*, pick the Clang kit).
-- **Manual host build** — build Wolf outside Docker (Docker must still be installed for Wolf to do
+- **Manual host build** — build Heeler outside Docker (Docker must still be installed for Heeler to do
   anything useful). The doc covers building GStreamer and `gst-wayland-display` from source, apt deps,
   the required `LD_LIBRARY_PATH`/`PKG_CONFIG_PATH`/etc. env, and a `runwolf.sh` template of `WOLF_*`
   runtime vars.
@@ -65,7 +65,7 @@ C++ is auto-formatted with clang-format (`.clang-format`, 120 col) and enforced 
 **Style (deliberate, per the original author):** functional — no global state, side effects avoided,
 immutable inputs → new outputs. Shared/persistent state lives in [immer](https://github.com/arximboldi/immer)
 persistent containers wrapped in `immer::atom<...>` (e.g. `SessionsAtoms`, `PairedClientList`): treat a
-snapshot as read-only and swap in a new one to update, never mutate in place. This is what makes Wolf's
+snapshot as read-only and swap in a new one to update, never mutate in place. This is what makes Heeler's
 heavy concurrency (many simultaneous users) lock-free and safe. Prefer pure functions over shared
 mutable state, and keep protocol logic decoupled from the server runtime.
 
@@ -84,9 +84,9 @@ See `docs/modules/dev/pages/how-it-works.adoc` for the full picture.
   into the encode pipeline. Our images run [Sway](https://swaywm.org/) (optionally
   [Gamescope](https://github.com/ValveSoftware/gamescope)) as a Wayland client inside it. The
   compositor has no XWayland; apps needing X (e.g. Steam) rely on Gamescope for it.
-- **Virtual audio** — by default PulseAudio runs **inside the Wolf container** under supervisord
-  (`docker/startup.sh` sets `WOLF_EMBED_PULSE=true`; Wolf waits for the PA socket before starting). With
-  an external `PULSE_SERVER`, or if `pulseaudio` isn't installed, Wolf falls back to the legacy
+- **Virtual audio** — by default PulseAudio runs **inside the Heeler container** under supervisord
+  (`docker/startup.sh` sets `WOLF_EMBED_PULSE=true`; Heeler waits for the PA socket before starting). With
+  an external `PULSE_SERVER`, or if `pulseaudio` isn't installed, Heeler falls back to the legacy
   standalone `WolfPulseAudio` sidecar. Either way it uses `libpulse` for per-session virtual sinks.
 - **Virtual input** — mouse/keyboard events go **directly to the Wayland compositor** (no host device);
   gamepads and pen/touch are real `uinput`/`uhid` devices created by `inputtino`. Those are visible on
@@ -100,7 +100,7 @@ See `docs/modules/dev/pages/how-it-works.adoc` for the full picture.
 - **Guest apps** — run in containers. The Docker runner (`runners/docker.cpp`) builds the per-session
   spec: mounts a per-app state folder, exposes the GPU render node (`/dev/dri/renderD*`), on NVIDIA adds
   the driver (custom driver volume, or `--gpus all` + `NVIDIA_VISIBLE_DEVICES`/`_DRIVER_CAPABILITIES` +
-  the `nvidia` runtime), passes through Wolf's virtual input devices, sets `DeviceCgroupRules` for the
+  the `nvidia` runtime), passes through Heeler's virtual input devices, sets `DeviceCgroupRules` for the
   dynamic `hidraw`/`input` majors (needed for the virtual DualSense), and wires up fake-udev. It then
   blocks for the container's lifetime plugging/unplugging devices via the event bus, and on exit
   stops/removes it (`WOLF_STOP_CONTAINER_ON_EXIT`) and cleans up the udev scratch dir.
@@ -148,4 +148,4 @@ Behavior is driven by `WOLF_*` env vars read via `utils::get_env` (full working 
 `WOLF_LOG_LEVEL`, `WOLF_DOCKER_SOCKET`, `WOLF_RENDER_NODE`/`WOLF_ENCODER_NODE` (GPU DRI nodes),
 `WOLF_PULSE_IMAGE`, `WOLF_INTERNAL_IP`/`WOLF_INTERNAL_MAC`, `WOLF_USE_ZERO_COPY`,
 `WOLF_STOP_CONTAINER_ON_EXIT`. A few (e.g. `WOLF_EMBED_PULSE`, `PULSE_SERVER`) are set/consumed by
-`docker/startup.sh` + `supervisord.conf`, not by Wolf itself.
+`docker/startup.sh` + `supervisord.conf`, not by Heeler itself.

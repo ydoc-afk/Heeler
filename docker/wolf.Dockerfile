@@ -75,7 +75,7 @@ RUN --mount=type=cache,target=/cache/ccache \
 FROM $BASE_IMAGE AS runner
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Wolf runtime dependencies
+# Heeler runtime dependencies
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -96,10 +96,10 @@ RUN apt-get update -y && \
     libglvnd0 libgl1 libglx0 libegl1 libgles2 xwayland hwdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Embedded PulseAudio: Wolf runs its own PulseAudio server inside this container
+# Embedded PulseAudio: Heeler runs its own PulseAudio server inside this container
 # (supervised by supervisord, see startup.sh + supervisord.conf) so audio is
-# available as soon as Wolf boots, without the legacy external "WolfPulseAudio"
-# sidecar container and its startup race. supervisord starts PA before Wolf,
+# available as soon as Heeler boots, without the legacy external "WolfPulseAudio"
+# sidecar container and its startup race. supervisord starts PA before Heeler,
 # restarts it if it dies, and stops both cleanly on container shutdown.
 # pulseaudio-utils ships pactl, handy for debugging audio from inside the container.
 RUN apt-get update -y && \
@@ -162,7 +162,7 @@ EXPOSE 48100/udp
 EXPOSE 48200/udp
 
 LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
-LABEL org.opencontainers.image.description="Wolf: stream virtual desktops and games in Docker"
+LABEL org.opencontainers.image.description="Heeler: stream virtual desktops and games in Docker"
 
 # See GOW/base-app
 COPY --chmod=777 docker/startup.sh /opt/gow/startup-app.sh
