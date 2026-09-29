@@ -36,14 +36,15 @@ bool init() {
   return true;
 }
 
-enet_host create_host(std::string_view host, std::uint16_t port, std::size_t peers) {
+std::optional<enet_host> create_host(std::string_view host, std::uint16_t port, std::size_t peers) {
   ENetAddress addr;
   enet_address_set_host(&addr, host.data());
   enet_address_set_port(&addr, port);
 
   auto enet_host = enet_host_create(AF_INET, &addr, peers, 0, 0, 0);
   if (enet_host == nullptr) {
-    logs::log(logs::error, "An error occurred while trying to create an ENet server host.");
+    logs::log(logs::error, "An error occurred while trying to create an ENet server host on port {}.", port);
+    return std::nullopt;
   }
 
   return {enet_host, free_host};
@@ -135,7 +136,12 @@ void run_control(int port,
                  std::chrono::milliseconds timeout,
                  const std::string &host_ip) {
 
-  enet_host host = create_host(host_ip, port, peers);
+  auto host_opt = create_host(host_ip, port, peers);
+  if (!host_opt) {
+    logs::log(logs::error, "Control server could not be started on port {}, aborting control loop", port);
+    return;
+  }
+  enet_host host = std::move(*host_opt);
   logs::log(logs::info, "Control server started on port: {}", port);
 
   ENetEvent event;
