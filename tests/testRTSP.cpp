@@ -451,6 +451,50 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                        REQUIRE(response.value().seq_number == 7);
                      });
   }
+
+  // Client controlled video params flow into integer divisions (SIGFPE) in the video pipeline
+  // so ANNOUNCE must reject them with a 400 rather than accept (or throw on) them
+  auto announce_video_params = [&](int cseq, std::string_view video_params) {
+    auto sdp = fmt::format("v=0\n"
+                           "a=x-nv-video[0].clientViewportWd:1920 \n"
+                           "a=x-nv-video[0].clientViewportHt:1080 \n"
+                           "{}"
+                           "\n\n\n\n",
+                           video_params);
+    wolf_client->run(fmt::format("ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
+                                 "CSeq: {}\n"
+                                 "X-GS-ClientVersion: 14\n"
+                                 "Host: 0.0.0.0\n"
+                                 "Session:  DEADBEEFCAFE\n"
+                                 "Content-type: application/sdp\n"
+                                 "Content-length: {}\n"
+                                 "\n"
+                                 "{}",
+                                 cseq,
+                                 sdp.size(),
+                                 sdp),
+                     [cseq](std::optional<RTSP_PACKET> response) {
+                       REQUIRE(response.has_value());
+                       REQUIRE(response.value().response.status_code == 400);
+                       REQUIRE(response.value().seq_number == cseq);
+                     });
+  };
+
+  SECTION("ANNOUNCE rejects maxFPS == 0") {
+    announce_video_params(8, "a=x-nv-video[0].maxFPS:0 \n");
+  }
+
+  SECTION("ANNOUNCE rejects missing maxFPS") {
+    announce_video_params(9, "");
+  }
+
+  SECTION("ANNOUNCE rejects packetSize == 0") {
+    announce_video_params(10, "a=x-nv-video[0].maxFPS:60 \na=x-nv-video[0].packetSize:0 \n");
+  }
+
+  SECTION("ANNOUNCE rejects a packetSize too small for the video headers") {
+    announce_video_params(11, "a=x-nv-video[0].maxFPS:60 \na=x-nv-video[0].packetSize:32 \n");
+  }
 }
 
 TEST_CASE("Commands (IP Matching)", "[RTSP]") {
