@@ -195,6 +195,13 @@ void run_control(int port,
             try {
               auto enc_pkt = (ControlEncryptedPacket *)(packet->data);
               auto decrypted = decrypt_packet(*enc_pkt, client_session->aes_key);
+              // An empty result means the AES-GCM authentication tag was invalid
+              // (tampered/corrupted packet): drop it instead of reading a sub_type
+              // from unauthenticated data
+              if (decrypted.size() < sizeof(ControlPacket)) {
+                logs::log(logs::warning, "[ENET] Dropping packet with invalid AES-GCM authentication tag");
+                break;
+              }
               auto sub_type = ((ControlPacket *)decrypted.data())->type;
 
               logs::log(logs::trace,
