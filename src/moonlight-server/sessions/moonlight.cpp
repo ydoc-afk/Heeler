@@ -46,6 +46,7 @@ wait_for_ping(std::shared_ptr<events::EventBusType> ev_bus,
   // Wait for the promise to be fulfilled (bounded: a client that never pings
   // must not leave this thread and the handler registered forever)
   if (ping_future.wait_for(timeout) != std::future_status::ready) {
+    handler.unregister();
     logs::log(logs::warning,
               "No RTP ping received for session {} within {} ms, stopping the stream",
               sess->session_id,
@@ -268,10 +269,10 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
           // Start streaming
           streaming::start_streaming_video(sess,
                                            ev_bus,
-                                           ping_ev->client_ip,
-                                           ping_ev->client_port,
+                                           (*ping_ev)->client_ip,
+                                           (*ping_ev)->client_port,
                                            gst_context,
-                                           ping_ev->video_socket.get());
+                                           (*ping_ev)->video_socket.get());
         }).detach();
       }));
 
@@ -293,9 +294,9 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
 
           streaming::start_streaming_audio(sess,
                                            ev_bus,
-                                           ping_ev->client_ip,
-                                           ping_ev->client_port,
-                                           ping_ev->audio_socket.get(),
+                                           (*ping_ev)->client_ip,
+                                           (*ping_ev)->client_port,
+                                           (*ping_ev)->audio_socket.get(),
                                            sink_name,
                                            server_name);
         }).detach();
