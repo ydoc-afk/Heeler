@@ -5,34 +5,75 @@
 [![GitHub license](https://img.shields.io/github/license/games-on-whales/wolf)](https://github.com/games-on-whales/wolf/blob/main/LICENSE)
 [![Donate button](https://img.shields.io/badge/Donate-Open%20Collective-blue.svg?color=blue)](https://opencollective.com/games-on-whales/donate)
 
+<p align="center">
+  <img src="docs/modules/ROOT/images/wolf-banner.png" alt="Wolf: share one Linux host with many Moonlight clients" width="800">
+</p>
+
 > An intelligent wolf is better than a foolish lion.
 >
 > &mdash; <cite>Matshona Dhliwayo.</cite>
 
-Wolf is a streaming server for [Moonlight](https://moonlight-stream.org/) that allows you to share a single server with
-multiple remote clients in order to play videogames!
+**Wolf** is a low-latency, open source streaming server for [Moonlight](https://moonlight-stream.org/) that lets you
+share a single Linux host with **multiple remote clients** to play videogames. Each client gets an on-demand virtual
+desktop (a headless Wayland compositor &mdash; no monitor or dummy plug needed) whose apps run in isolated
+Docker/Podman containers.
 
 ![Wolf basic flow chart](https://github.com/games-on-whales/wolf/blob/stable/docs/modules/ROOT/images/wolf-introduction.svg?raw=true)
 
-It's made from the ground up with the following primary goals:
+## Features
 
-- Allow multiple users to stream different content by sharing a single remote host hardware
-- On demand creation of virtual desktops with full support for any resolution/FPS without the need for a monitor or a
-  dummy plug.
-- Allow multiple GPUs to be used simultaneously for different jobs
-    - Example: stream encoding on iGPU whilst gaming on GPU
-- Provide low latency video and audio stream with full support for gamepads
-- Linux and Docker first: run your games with low privileges in containers (based
-  on [Games On Whales](https://github.com/games-on-whales/gow))
-- Mostly hackable, just edit the config file to modify encoding pipelines, GPU settings or Docker/Podman low level
-  details
+- **Multi-user by design** &mdash; many clients stream different content from the same hardware at the same time
+- **On-demand virtual desktops** &mdash; any resolution/FPS, created when a session starts and destroyed when it ends
+- **Multi-GPU** &mdash; use several GPUs simultaneously (e.g. encode on the iGPU while gaming on the dGPU)
+- **Low latency** &mdash; H.264/HEVC/AV1 hardware encoding (NVIDIA, Intel, AMD) with full gamepad, mouse and keyboard
+  support, including hot-plugging controllers mid-session
+- **Linux & Docker first** &mdash; games run with low privileges in containers
+  (based on [Games On Whales](https://github.com/games-on-whales/gow))
+- **Hackable** &mdash; the whole audio/video pipeline is a GStreamer config string in `config.toml`: change encoders,
+  parameters or Docker details without touching code
+- **Lobbies** &mdash; clients can share/join a running desktop for co-op sessions
+- A control API over a Unix socket, used by [wolf-ui](https://github.com/games-on-whales/wolf-ui) for pairing,
+  user management and session control
 
-It's a specific tool for a specific need, are you looking for a general purpose streaming solution?
+Wolf is a specific tool for a specific need. Looking for a general purpose single-user streaming solution?
 Try out [Sunshine](https://github.com/LizardByte/Sunshine)!
 
-Want to give it a spin? [Checkout our docs](https://games-on-whales.github.io/wolf/stable/)!
+## Get started
+
+Wolf runs as a single container and spins up additional containers on demand. The short version (full details,
+including NVIDIA and Podman, in the [quickstart](https://games-on-whales.github.io/wolf/stable/user/quickstart.html)):
+
+```bash
+docker run \
+    --name wolf \
+    --network=host \
+    -v /etc/wolf:/etc/wolf:rw \
+    -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    --device /dev/dri/ \
+    --device /dev/uinput \
+    --device /dev/uhid \
+    -v /dev/:/dev/:rw \
+    -v /run/udev:/run/udev:rw \
+    --device-cgroup-rule "c 13:* rmw" \
+    ghcr.io/games-on-whales/wolf:stable
+```
+
+Then point any Moonlight client at your host, pair it (you'll get a PIN link in the logs), and start streaming.
+Prebuilt guest-app containers (Steam, Pegasus, PrismLauncher, ...) are available
+from [games-on-whales/gow](https://github.com/games-on-whales/gow).
 
 [![Youtube video preview](https://github.com/games-on-whales/wolf/blob/stable/docs/modules/ROOT/images/introduction-video.png?raw=true)](https://www.youtube.com/watch?v=z5jzLIUH6rA)
+
+## Documentation
+
+- [User guide](https://games-on-whales.github.io/wolf/stable/) &mdash; quickstart, configuration, wolf-ui,
+  troubleshooting
+- [Developer guide](https://games-on-whales.github.io/wolf/stable/dev/how-it-works.html) &mdash; how it works under
+  the hood, building from source, the control API
+- [Protocol documentation](https://games-on-whales.github.io/wolf/stable/protocols/index.html) &mdash; the Moonlight
+  protocol as implemented by Wolf (pairing, RTSP, RTP, control)
+- [FAQ](https://games-on-whales.github.io/wolf/stable/faq.html)
+- Questions? Join the [Discord](https://discord.gg/kRGUDHNHt2)
 
 ## Acknowledgements
 
