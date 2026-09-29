@@ -424,7 +424,7 @@ std::optional<std::shared_ptr<events::StreamSession>> create_run_session(
 }
 
 std::string get_rtsp_ip_string(const std::string &local_ip, const events::StreamSession &session) {
-  auto use_fake_ip = utils::get_env("WOLF_USE_RTSP_FAKE_IP", "TRUE") == "TRUE"s;
+  auto use_fake_ip = utils::get_env("HEALER_USE_RTSP_FAKE_IP", "TRUE") == "TRUE"s;
   return use_fake_ip ? session.rtsp_fake_ip : local_ip;
 }
 

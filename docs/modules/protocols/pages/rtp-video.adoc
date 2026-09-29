@@ -11,8 +11,8 @@ Here are a few random notes about the low level details of the video streaming p
 The port exchanged during the RTSP phase it's not where the actual video stream will take place!
 ====
 
-Moonlight will send a `PING` package to the exchanged port, this will tell us which random port the connecting client was able to open in order to communicate with Wolf.
-The client port from where Wolf receives the `PING` will also be the one where the actual RTP stream will be sent to.
+Moonlight will send a `PING` package to the exchanged port, this will tell us which random port the connecting client was able to open in order to communicate with Heeler.
+The client port from where Heeler receives the `PING` will also be the one where the actual RTP stream will be sent to.
 
 This is necessary because usually clients will be behind https://en.wikipedia.org/wiki/Network_address_translation[NAT].
 
