@@ -1,18 +1,18 @@
-# ydoc-afk/Heeler
+# games-on-whales/wolf
 
-[![Linux build and test](https://github.com/ydoc-afk/Heeler/actions/workflows/linux-build-test.yml/badge.svg)](https://github.com/ydoc-afk/Heeler/actions/workflows/linux-build-test.yml)
+[![Linux build and test](https://github.com/games-on-whales/wolf/actions/workflows/linux-build-test.yml/badge.svg)](https://github.com/games-on-whales/wolf/actions/workflows/linux-build-test.yml)
 [![Discord](https://img.shields.io/discord/856434175455133727.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/kRGUDHNHt2)
-[![GitHub license](https://img.shields.io/github/license/ydoc-afk/Heeler)](https://github.com/ydoc-afk/Heeler/blob/main/LICENSE)
+[![GitHub license](https://img.shields.io/github/license/games-on-whales/wolf)](https://github.com/games-on-whales/wolf/blob/main/LICENSE)
 [![Donate button](https://img.shields.io/badge/Donate-Open%20Collective-blue.svg?color=blue)](https://opencollective.com/games-on-whales/donate)
 
 > An intelligent wolf is better than a foolish lion.
 >
 > &mdash; <cite>Matshona Dhliwayo.</cite>
 
-Heeler is a streaming server for [Moonlight](https://moonlight-stream.org/) that allows you to share a single server with
+Wolf is a streaming server for [Moonlight](https://moonlight-stream.org/) that allows you to share a single server with
 multiple remote clients in order to play videogames!
 
-![Heeler](docs/modules/ROOT/images/heeler.jpg)
+![Wolf basic flow chart](https://github.com/games-on-whales/wolf/blob/stable/docs/modules/ROOT/images/wolf-introduction.svg?raw=true)
 
 It's made from the ground up with the following primary goals:
 
@@ -36,7 +36,7 @@ Want to give it a spin? [Checkout our docs](https://games-on-whales.github.io/wo
 
 ## Acknowledgements
 
-- [@Drakulix](https://github.com/Drakulix) for the incredible help given in developing Heeler
+- [@Drakulix](https://github.com/Drakulix) for the incredible help given in developing Wolf
 - [@zb140](https://github.com/zb140) for the constant help and support in [GOW](https://github.com/games-on-whales/gow)
 - [@loki-47-6F-64](https://github.com/loki-47-6F-64) for creating and
   sharing [Sunshine](https://github.com/loki-47-6F-64/sunshine)
