@@ -9,7 +9,7 @@ Here we start with a question:
 How can we securely authenticate an untrusted client over an insecure network?
 ====
 
-This involves quite a bit of cryptography and a few steps between the client (Moonlight) and the server (Wolf).
+This involves quite a bit of cryptography and a few steps between the client (Moonlight) and the server (Heeler).
 
 [plantuml,format=svg]
 ....
@@ -17,7 +17,7 @@ title: Moonlight Pairing protocol
 autonumber
 
 participant Moonlight as M
-participant Wolf as W
+participant Heeler as W
 
 
 group Phase 1
@@ -58,7 +58,7 @@ end
 title: Pairing - Phase 1
 
 participant Moonlight as M
-participant Wolf as W
+participant Heeler as W
 
 
 M->W ++:salt + client cert
@@ -81,7 +81,7 @@ At this stage we only have to send back our public certificate (`plaincert`).
 title: Pairing - Phase 2
 
 participant Moonlight as M
-participant Wolf as W
+participant Heeler as W
 
 
 M->W ++: client challenge 🔐
@@ -107,7 +107,7 @@ The hash + server_challenge will then be AES encrypted and sent as the `challeng
 title: Pairing - Phase 3
 
 participant Moonlight as M
-participant Wolf as W
+participant Heeler as W
 
 M->W ++: server challenge response 🔐
 return: server secret + signature
@@ -123,7 +123,7 @@ using our private key we have to sign the certificate_signature + server_secret 
 title: Pairing - Phase 4
 
 participant Moonlight as M
-participant Wolf as W
+participant Heeler as W
 
 
 M->W ++: client secret + signature
@@ -155,11 +155,11 @@ The response will contain:
 title: Pairing - Phase 5
 
 participant Moonlight as M
-participant Wolf as W
+participant Heeler as W
 
 M->W ++: pairchallenge
 return:  paired = 1
 ....
 
-This extra step will run over HTTPS in order to make sure that Moonlight can reach Wolf over a secure connection. +
+This extra step will run over HTTPS in order to make sure that Moonlight can reach Heeler over a secure connection. +
 On the backend every HTTPS request will be checked for a valid client certificate; only clients that have been successfully paired will be allowed to call the APIs

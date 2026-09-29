@@ -10,7 +10,7 @@ title: RTSP protocol
 autonumber
 
 participant Moonlight as M
-participant Wolf as W
+participant Heeler as W
 
 
 group OPTIONS

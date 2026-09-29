@@ -24,7 +24,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
   auto state = state::load_or_default("config.test.toml", event_bus, running_sessions);
-  REQUIRE(state.hostname == "Wolf");
+  REQUIRE(state.hostname == "Heeler");
   REQUIRE(state.uuid == "0000-1111-2222-3333");
   REQUIRE(state.support_hevc);
 
@@ -164,7 +164,7 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
     REQUIRE(xml_to_str(result) ==
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
             "<root status_code=\"200\">"
-            "<hostname>Wolf</hostname>"
+            "<hostname>Heeler</hostname>"
             "<appversion>7.1.431.-1</appversion>"
             "<GfeVersion>3.23.0.74</GfeVersion>"
             "<uniqueid>0000-1111-2222-3333</uniqueid>"
@@ -201,7 +201,7 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
     REQUIRE(xml_to_str(result) ==
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
             "<root status_code=\"200\">"
-            "<hostname>Wolf</hostname>"
+            "<hostname>Heeler</hostname>"
             "<appversion>7.1.431.-1</appversion>"
             "<GfeVersion>3.23.0.74</GfeVersion>"
             "<uniqueid>0000-1111-2222-3333</uniqueid>"
