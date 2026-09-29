@@ -5,6 +5,7 @@ using Catch::Matchers::Equals;
 
 #include <boost/beast/_experimental/test/stream.hpp>
 #include <crypto/crypto.hpp>
+#include <future>
 #include <rtsp/net.hpp>
 #include <rtsp/parser.hpp>
 #include <state/data-structures.hpp>
@@ -637,4 +638,78 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                        REQUIRE(response.value().seq_number == 7);
                      });
   }
+}
+TEST_CASE("Multi-chunk message assembly", "[RTSP]") {
+  // A message arriving split across two TCP reads must be reassembled without
+  // duplicating the first chunk or truncating the tail (streambuf handling in
+  // tcp_connection::receive_message).
+  auto body = "v=0\n"
+              "o=android 0 14 IN IPv4 192.168.1.227\n"
+              "s=NVIDIA Streaming Client\n"
+              "a=x-nv-video[0].clientViewportWd:1920\n"
+              "a=x-nv-video[0].clientViewportHt:1080\n"
+              "a=x-nv-video[0].maxFPS:60\n";
+
+  std::string msg = "ANNOUNCE streamid=control/13/0 RTSP/1.0\r\n"
+                    "CSeq: 6\r\n"
+                    "X-GS-ClientVersion: 14\r\n"
+                    "Host: 192.168.1.227\r\n"
+                    "Content-type: application/sdp\r\n"
+                    "Content-length: " +
+                    std::to_string(body.size()) + "\r\n"
+                    "\r\n" +
+                    body;
+
+  // Split in the middle of the body, once the Content-length header is already visible
+  auto split_at = msg.find("\r\n\r\n") + 4 + body.size() / 2;
+  auto first_chunk = msg.substr(0, split_at);
+  auto second_chunk = msg.substr(split_at);
+
+  boost::asio::io_context ioc;
+  auto state = test_init_state();
+
+  tcp::acceptor acceptor(ioc, tcp::endpoint(tcp::v4(), 0));
+  auto port = acceptor.local_endpoint().port();
+
+  // Receiver side: a tcp_connection whose socket is connected to our acceptor
+  auto tester = tcp_tester::create_client(ioc, port, state);
+
+  std::optional<RTSP_PACKET> parsed;
+  std::promise<void> done;
+  auto done_fut = done.get_future();
+
+  tester->receive_message([&](std::optional<RTSP_PACKET> result) {
+    parsed = std::move(result);
+    done.set_value();
+  });
+
+  // Client side: deliver the message in two separate writes
+  tcp::socket client(ioc);
+  asio::connect(client, acceptor.local_endpoint());
+  tcp::socket server_side(ioc);
+  acceptor.async_accept(server_side, [](auto ec) {});
+
+  asio::write(client, asio::buffer(first_chunk));
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  asio::write(client, asio::buffer(second_chunk));
+
+  // Pump the io_context on a separate thread until the message is reassembled
+  std::thread pump([&ioc] {
+    while (ioc.poll()) {
+    }
+  });
+
+  REQUIRE(done_fut.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+  tester->socket().close();
+  ioc.stop();
+  pump.join();
+
+  REQUIRE(parsed.has_value());
+  REQUIRE_THAT(parsed->request.cmd, Equals("ANNOUNCE"));
+  REQUIRE(parsed->seq_number == 6);
+  // The tail of the body must survive: with the old streambuf handling the first
+  // chunk was duplicated and the last bytes of the payload were dropped
+  REQUIRE(parsed->payloads.size() == 6);
+  REQUIRE_THAT(parsed->payloads.back().first, Equals("a"));
+  REQUIRE_THAT(parsed->payloads.back().second, Equals("x-nv-video[0].maxFPS:60"));
 }
