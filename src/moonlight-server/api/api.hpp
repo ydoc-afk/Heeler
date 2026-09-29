@@ -2,6 +2,7 @@
 
 #include <api/http_server.hpp>
 #include <events/events.hpp>
+#include <mutex>
 #include <events/reflectors.hpp>
 #include <moonlight/control.hpp>
 #include <state/data-structures.hpp>
@@ -252,6 +253,9 @@ private:
     boost::asio::io_context &io_context;
     immer::box<state::AppState> app_state;
     boost::asio::local::stream_protocol::acceptor acceptor;
+    // Guards sockets: it's pushed to from the request thread pool (endpoint_Events),
+    // iterated from the io thread (keepalive/broadcast) and mutated from async completions
+    std::mutex sockets_mutex;
     std::vector<std::shared_ptr<UnixSocket>> sockets;
     HTTPServer<std::shared_ptr<UnixSocket>> http;
     boost::asio::steady_timer sse_keepalive_timer;
