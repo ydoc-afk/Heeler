@@ -4,7 +4,7 @@ The code is written in order to be as readable as possible **with no side effect
 
 We (try to) follow a *functional programming* paradigm where all the methods take *immutable* inputs and returns new outputs; this has great benefits:
 
-* Given the highly parallel nature of Wolf, we can easily share immutable data structures to multiple threads without having to deal with race conditions.
+* Given the highly parallel nature of Heeler, we can easily share immutable data structures to multiple threads without having to deal with race conditions.
 ** This gives us the power to support multiple concurrent users effortlessly.
 * Code can easily be re-used by other projects since every part is highly decoupled.
 * Enables testing most of the implemented methods in isolation.
@@ -15,7 +15,7 @@ We are also trying to isolate the Moonlight protocol from the actual implementat
 
 === src/core
 
-High-level utilities and re-usable libraries, not strictly tied to Moonlight or Wolf:
+High-level utilities and re-usable libraries, not strictly tied to Moonlight or Heeler:
 
 * https://github.com/games-on-whales/wolf/blob/HEAD/src/core/src/core/docker.hpp[docker.hpp]: using libcurl and boost json to interrogate the Docker socket and provide an easy to use interface to most methods.
 * https://github.com/games-on-whales/wolf/blob/HEAD/src/core/src/core/input.hpp[input.hpp]: an easy to use virtual input device library; supports mouse, keyboard, joypads and more!
@@ -41,7 +41,7 @@ It currently hosts the followings:
 
 === src/moonlight-server
 
-This is where the final Wolf executable will be built, contains all the additional code and logic required to run the full Moonlight server. +
+This is where the final Heeler executable will be built, contains all the additional code and logic required to run the full Moonlight server. +
 In order to keep modules decoupled most of the logic revolves around reacting to events in a shared event bus (implemented using https://github.com/DeveloperPaul123/eventbus[DeveloperPaul123/eventbus]).
 
 === tests

@@ -1,8 +1,8 @@
-= Wolf helper scripts
+= Heeler helper scripts
 
 == wolf-input-diag.sh
 
-Host-side diagnostic that validates controller/input passthrough for Wolf. It
+Host-side diagnostic that validates controller/input passthrough for Heeler. It
 answers two questions:
 
 * *Isolation* — is a session's controller input leaking somewhere it shouldn't
@@ -20,7 +20,7 @@ grabs a device, so it can't steal input from a running game.
 # Audit host-side isolation (catches "controller drives the host desktop"):
 sudo ./scripts/wolf-input-diag.sh host
 
-# List Wolf containers and the input devices mounted in each:
+# List Heeler containers and the input devices mounted in each:
 ./scripts/wolf-input-diag.sh discover
 
 # Fail if any device node is shared across containers:

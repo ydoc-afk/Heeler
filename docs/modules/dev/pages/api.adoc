@@ -1,7 +1,7 @@
 :includedir: partial$
-= Wolf API
+= Heeler API
 
-Wolf exposes a REST API that allows you to interact with the platform programmatically. +
+Heeler exposes a REST API that allows you to interact with the platform programmatically. +
 The API can be accessed only via UNIX sockets, you can control the exact path by setting the `WOLF_SOCKET_PATH` environment variable.
 If you want to access the socket from outside the container, you should mount the socket to the host machine, ex: `-e WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock` and `-v /var/run/wolf:/var/run/wolf` will allow you to access the socket from the host machine at `/var/run/wolf/wolf.sock`.
 

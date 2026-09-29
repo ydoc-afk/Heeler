@@ -397,7 +397,7 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
       fmt::arg("host_port", video_session->port));
   logs::log(logs::debug, "Starting video pipeline: \n{}", pipeline);
 
-  bool enable_pacing = utils::get_env("WOLF_ENABLE_VIDEO_PACING", "TRUE") == std::string("TRUE");
+  bool enable_pacing = utils::get_env("HEALER_ENABLE_VIDEO_PACING", "TRUE") == std::string("TRUE");
   std::shared_ptr<custom_sink::UDPSink> udp_sink = std::make_shared<custom_sink::UDPSink>(custom_sink::UDPSink{
       .socket = video_socket,
       .client_endpoint = std::make_shared<udp::endpoint>(boost::asio::ip::make_address(client_ip), client_port),

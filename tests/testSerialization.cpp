@@ -22,7 +22,7 @@ TEST_CASE("Serialize to JSON", "[serialization]") {
     REQUIRE_THAT(rfl::json::write(homer), Equals("{\"first_name\":\"Homer\",\"last_name\":\"Simpson\",\"age\":45}"));
   }
 
-  SECTION("Wolf events") {
+  SECTION("Heeler events") {
     auto event = events::PlugDeviceEvent{.session_id = "123",
                                          .udev_events = {{{"add", "usb"}}},
                                          .udev_hw_db_entries = {{"usb", {"usb1", "usb2"}}}};

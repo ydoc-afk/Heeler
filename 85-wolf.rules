@@ -1,19 +1,19 @@
-# Allows Wolf to access /dev/uinput (needed to create the virtual gamepad)
+# Allows Heeler to access /dev/uinput (needed to create the virtual gamepad)
 KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput", TAG+="uaccess"
 
-# Allows Wolf to access /dev/uhid (needed for DualSense emulation)
+# Allows Heeler to access /dev/uhid (needed for DualSense emulation)
 KERNEL=="uhid", MODE="0660", GROUP="input", TAG+="uaccess"
 
-# Wolf virtual controllers: the gamepads (Xbox / DualSense / Nintendo), the
+# Heeler virtual controllers: the gamepads (Xbox / DualSense / Nintendo), the
 # DualSense's "Touchpad" and "Motion Sensors" child input devices, and the
 # DualSense /dev/hidraw* node.
 #
-# These are created by Wolf inside its container but appear as real devices in
+# These are created by Heeler inside its container but appear as real devices in
 # the HOST kernel. Without these rules, logind grants the host's active-seat
 # desktop user an ACL (uaccess) on them, so the streamed controller also drives
 # the host desktop. See https://github.com/games-on-whales/wolf/issues/451
 #
-# We match on the "Wolf *virtual*" name glob: every device Wolf creates is named
+# We match on the "Wolf *virtual*" name glob: every device Heeler creates is named
 # "Wolf ... (virtual) ...", so this covers all current and future sub-devices
 # without matching unrelated "Wolf" hardware.
 # We then (a) park them on the phantom seat9 and (b) strip the uaccess ACL. Both
