@@ -237,7 +237,16 @@ void run() {
 
   auto audio_server = setup_audio_server(local_state->host->host_xdg_runtime_dir, runtime_dir);
   // PulseAudio sink-input router (hostname -> session_id -> virtual_sink_<session>)
-  auto pulse_router_state = std::make_shared<audio::PulseAudioRouterState>(audio_server->server);
+  // setup_audio_server() returns nullopt when no PulseAudio server is available (no
+  // PULSE_SERVER and the sidecar container failed to start); streaming can still run
+  // without audio, so degrade gracefully instead of dereferencing the optional.
+  std::shared_ptr<audio::PulseAudioRouterState> pulse_router_state;
+  if (audio_server && audio_server->server) {
+    pulse_router_state = std::make_shared<audio::PulseAudioRouterState>(audio_server->server);
+  } else {
+    logs::log(logs::warning,
+              "No PulseAudio server available, sessions will start without audio");
+  }
   auto pulse_router_handlers = audio::setup_pulseaudio_router_handlers(local_state, pulse_router_state);
   // Setup event handlers for Moonlight related events (Start/Stop stream, hotplug, etc)
   auto moonlight_sess_handlers = sessions::setup_moonlight_handlers(local_state, runtime_dir, audio_server);
