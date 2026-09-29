@@ -3,6 +3,7 @@ R"for_c++_include(
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Heeler - PIN</title>
     <style>
         body {
@@ -15,86 +16,216 @@ R"for_c++_include(
             background: linear-gradient(132deg, rgba(114, 0, 130, 1) 0%, rgba(63, 0, 195, 1) 50%, rgba(0, 71, 255, 1) 100%);
         }
 
+        #content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            color: white;
+            text-align: center;
+            padding: 1rem;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin: 0;
+        }
+
+        .hint {
+            opacity: 0.85;
+            max-width: 30rem;
+            margin: 0;
+        }
+
+        .card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1.5rem 2rem;
+            border-radius: 0.75rem;
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .card .client {
+            font-size: 1.1rem;
+        }
+
+        .card .status {
+            font-size: 0.95rem;
+            opacity: 0.9;
+            min-height: 1.2em;
+        }
+
+        .card.done {
+            background: rgba(255, 255, 255, 0.22);
+        }
+
         form {
             display: flex;
             justify-content: center;
-            color: white;
         }
 
         input {
             margin: 0 0.5rem;
             padding: 0.5rem;
             border: 1px solid white;
+            border-radius: 0.25rem;
             width: 50px;
             height: 50px;
             text-align: center;
             font-size: 3rem;
-        }
-
-        /* Chrome, Safari, Edge, Opera */
-        input::-webkit-outer-spin-button,
-        input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-
-        /* Firefox */
-        input[type=number] {
-            -moz-appearance: textfield;
+            color: white;
+            background: transparent;
         }
     </style>
 </head>
 <body>
 
-
-<div>
-    <form class="form">
-        <input type="number" min="0" max="9" step="1"/>
-        <input type="number" min="0" max="9" step="1"/>
-        <input type="number" min="0" max="9" step="1"/>
-        <input type="number" min="0" max="9" step="1"/>
-    </form>
+<div id="content">
+    <h1>Wolf pairing</h1>
 </div>
 
-
-</body>
 <script type="application/javascript">
-    const inputs = document.querySelectorAll("input");
-    const form = document.querySelector(".form");
+    const content = document.getElementById("content");
+    const deepLinkSecret = window.location.hash.substring(1);
+    const POLL_MS = 2500;
 
-    function send(pin) {
-        let xhr = new XMLHttpRequest();
+    // secret -> card, so polling never re-renders a card the user is currently typing in
+    const cards = new Map();
+
+    function sendPin(card, secret, statusEl) {
+        const pin = [...card.querySelectorAll("input")].map(i => i.value).join("");
+        const xhr = new XMLHttpRequest();
         xhr.open("POST", "/pin/", true);
         xhr.setRequestHeader("Content-Type", "application/json");
+        statusEl.textContent = "Sending PIN ...";
         xhr.onreadystatechange = function () {
-            if (xhr.readyState === 4) {
-                form.textContent = xhr.responseText;
+            if (xhr.readyState !== 4) return;
+            if (xhr.status === 200) {
+                card.classList.add("done");
+                statusEl.textContent = "Paired! You can close this tab.";
+                card.querySelectorAll("input").forEach(i => i.remove());
+            } else {
+                statusEl.textContent = "Pairing failed, enter the PIN again.";
+                buildInputs(card, statusEl, secret);
             }
         };
-        const data = JSON.stringify({
+        xhr.send(JSON.stringify({
             "pin": pin,
-            "secret": window.location.hash.substring(1)
-        });
-        form.textContent = "Sending " + pin + " ...";
-        xhr.send(data);
+            "secret": secret
+        }));
     }
 
-    inputs.forEach((input, key) => {
-        input.addEventListener("keyup", function (ev) {
-            if (ev.key === "Backspace" && key > 0) {
-                inputs[key - 1].focus();
+    function buildInputs(card, statusEl, secret) {
+        const form = card.querySelector("form");
+        form.innerHTML = "";
+        const inputs = [];
+        for (let i = 0; i < 4; i++) {
+            const input = document.createElement("input");
+            input.type = "text";
+            input.inputMode = "numeric";
+            input.maxLength = 1;
+            input.autocomplete = "off";
+            inputs.push(input);
+            form.appendChild(input);
+        }
+        inputs.forEach((input, key) => {
+            input.addEventListener("input", () => {
+                input.value = input.value.replace(/\D/g, "").slice(-1);
+            });
+            input.addEventListener("keyup", (ev) => {
+                if (ev.key === "Backspace" && key > 0 && !input.value) {
+                    inputs[key - 1].focus();
+                } else if (input.value) {
+                    if (key === 3) {
+                        inputs.forEach(i => i.disabled = true);
+                        sendPin(card, secret, statusEl);
+                    } else {
+                        inputs[key + 1].focus();
+                    }
+                }
+            });
+        });
+        inputs[0].focus();
+    }
+
+    function createCard(secret, label) {
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const client = document.createElement("div");
+        client.className = "client";
+        client.textContent = label;
+        card.appendChild(client);
+
+        const status = document.createElement("div");
+        status.className = "status";
+        status.textContent = "Enter the 4-digit PIN shown on the device";
+        card.appendChild(status);
+
+        const form = document.createElement("form");
+        card.appendChild(form);
+
+        buildInputs(card, status, secret);
+        cards.set(secret, card);
+        return card;
+    }
+
+    function poll() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", "/pin/pending", true);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4 || xhr.status !== 200) return;
+            let data;
+            try {
+                data = JSON.parse(xhr.responseText);
+            } catch (e) {
+                return;
             }
-            if (input.value) {
-                if (key === 3) {
-                    const userCode = [...inputs].map((input) => input.value).join("");
-                    send(userCode);
-                    [...inputs].forEach((input) => input.remove());
-                } else {
-                    inputs[key + 1].focus();
+            const pending = data.requests || [];
+
+            // Drop cards whose request is gone (paired from elsewhere, or cancelled)
+            for (const [secret, card] of [...cards.entries()]) {
+                if (card.classList.contains("done")) continue;
+                if (!pending.some(r => r.secret === secret)) {
+                    card.remove();
+                    cards.delete(secret);
                 }
             }
-        });
-    });
-    inputs[0].focus();
+
+            // Add a card for each new pending request
+            for (const req of pending) {
+                if (cards.has(req.secret)) continue;
+                const label = req.hostname ? req.hostname + " (" + req.client_ip + ")" : req.client_ip;
+                content.appendChild(createCard(req.secret, label));
+            }
+
+            // Waiting hint only while nothing is pending
+            let hint = content.querySelector(".hint");
+            if (pending.length === 0) {
+                if (!hint) {
+                    hint = document.createElement("p");
+                    hint.className = "hint";
+                    hint.textContent = "Waiting for a device to request pairing...";
+                    content.appendChild(hint);
+                }
+            } else if (hint) {
+                hint.remove();
+            }
+        };
+        xhr.send();
+    }
+
+    if (deepLinkSecret) {
+        // Legacy deep link: /pin/#<secret> (e.g. copied from the server log)
+        content.appendChild(createCard(deepLinkSecret, "Enter the PIN shown on the device"));
+    } else {
+        poll();
+        setInterval(poll, POLL_MS);
+    }
 </script>
-</html>)for_c++_include"
+</body>
+</html>
+)for_c++_include"

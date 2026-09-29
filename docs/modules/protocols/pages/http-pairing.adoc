@@ -74,6 +74,13 @@ PIN and SALT will be used to derive a shared AES key that needs to be stored in 
 
 At this stage we only have to send back our public certificate (`plaincert`).
 
+=== Providing the PIN
+
+While phase 1 is waiting for the PIN, Wolf logs a one-shot URL (`http://<host>:<port>/pin/#<secret>`).
+The PIN page can be opened at that URL, or at the stable `http://<host>:<port>/pin/` landing page, which polls
+`GET /pin/pending` for waiting clients (client IP, and hostname when resolvable) and submits the PIN to
+`POST /pin/`. Entering the 4-digit PIN shown on the client's screen completes phase 1.
+
 == Phase 2
 
 [plantuml,format=svg]
