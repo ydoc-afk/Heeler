@@ -2,13 +2,13 @@
 #include <algorithm>
 #include <boost/endian.hpp>
 #include <boost/json.hpp>
+#include <cstdio>
 #include <helpers/logger.hpp>
 #include <optional>
 #include <range/v3/view.hpp>
 #include <sstream>
 #include <stdlib.h>
 #include <string>
-#include <cstdio>
 
 namespace utils {
 
