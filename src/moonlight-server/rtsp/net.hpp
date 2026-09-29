@@ -287,7 +287,7 @@ void run_server(int port, const state::SessionsAtoms &running_sessions) {
     // misbehaving connection handler must never take the whole server down: if
     // one throws, log it and resume the accept loop (the acceptor is still
     // alive) instead of letting the exception unwind run_server and leave the
-    // RTSP port dead until Wolf restarts.
+    // RTSP port dead until Heeler restarts.
     while (true) {
       try {
         io_context.run();

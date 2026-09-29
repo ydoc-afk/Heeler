@@ -1,6 +1,6 @@
 = Steam
 
-One of the pre-installed applications in the default Wolf configuration is Steam.
+One of the pre-installed applications in the default Heeler configuration is Steam.
 Getting Steam to work in a headless container took some work, so this page lists some limitations
 and tips to get the most out of Steam.
 
@@ -74,7 +74,7 @@ In order to add this, you must have already started the user once for said profi
 === Setting the mount point ===
 The host's library will need to mounted to the container.
 This is easily accomplished by using the `mounts` option in the `config.toml` file.
-Set `mounts = [ '/path/to/steamapps:/home/retro/.steam/debian-installation/steamapps:rw' ]` in the Steam block and restart Wolf.
+Set `mounts = [ '/path/to/steamapps:/home/retro/.steam/debian-installation/steamapps:rw' ]` in the Steam block and restart Heeler.
 
 === Permissions ===
 The library needs to be owned by user:group 1000:1000 for the container to access it.
@@ -84,13 +84,13 @@ When a new user is added, permissions prevent proper initialization of the first
 It will fail to load due to `/home/retro/.steam/ubuntu12_32/` and `/home/retro/.steam/ubuntu12_32/steam-runtime` not having the proper permissions.
 Once the first run has been attempted, these can be `chown` 'd to `1000:1000` and `chmod` 'd to `777`.
 
-This script performs a quick and easy fix for this. Usage is simple: run the Steam app once as the new user, letting it crash, and then run this script with `bash mk_steam_dir.sh userid` to correct the issue. Second start of the app with the new user should start with the Updating Steam dialogue. If you changed the default location where Wolf stores its persistent data, you'll need to update the BASE variable in the script.
+This script performs a quick and easy fix for this. Usage is simple: run the Steam app once as the new user, letting it crash, and then run this script with `bash mk_steam_dir.sh userid` to correct the issue. Second start of the app with the new user should start with the Updating Steam dialogue. If you changed the default location where Heeler stores its persistent data, you'll need to update the BASE variable in the script.
 
 `mk_steam_dir.sh`
 [source,bash]
 ....
 #!/bin/bash
-# Assign the base path for your Wolf persistent data:
+# Assign the base path for your Heeler persistent data:
 BASE=/etc/wolf
 # Check if the first argument is empty
 if [ -z "$1" ]; then

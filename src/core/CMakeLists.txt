@@ -45,9 +45,9 @@ if (UNIX AND NOT APPLE)
 
     list(APPEND CORE_SRC src/platforms/linux/batched_send/batched_send.cpp)
 
-    option(WOLF_CUSTOM_INPUTTINO_SRC "Use custom inputtino source" OFF)
-    if (WOLF_CUSTOM_INPUTTINO_SRC)
-        add_subdirectory(${WOLF_CUSTOM_INPUTTINO_SRC} ${CMAKE_CURRENT_BINARY_DIR}/inputtino EXCLUDE_FROM_ALL)
+    option(HEALER_CUSTOM_INPUTTINO_SRC "Use custom inputtino source" OFF)
+    if (HEALER_CUSTOM_INPUTTINO_SRC)
+        add_subdirectory(${HEALER_CUSTOM_INPUTTINO_SRC} ${CMAKE_CURRENT_BINARY_DIR}/inputtino EXCLUDE_FROM_ALL)
     else ()
         FetchContent_Declare(
                 inputtino

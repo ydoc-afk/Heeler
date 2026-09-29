@@ -66,11 +66,11 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
   }
 
   std::optional<std::string> internal_ip = std::nullopt;
-  if (auto override_ip = utils::get_env("WOLF_INTERNAL_IP")) {
+  if (auto override_ip = utils::get_env("HEALER_INTERNAL_IP")) {
     internal_ip = override_ip;
   }
   std::optional<std::string> mac_address = std::nullopt;
-  if (auto override_mac = utils::get_env("WOLF_INTERNAL_MAC")) {
+  if (auto override_mac = utils::get_env("HEALER_INTERNAL_MAC")) {
     mac_address = override_mac;
   }
 
@@ -78,7 +78,7 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
   std::string host_base_state_folder = local_base_state_folder;
   std::string host_xdg_runtime_dir = utils::get_env("XDG_RUNTIME_DIR", "/tmp/sockets");
 
-  docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
+  docker::DockerAPI docker_api(utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock"));
   if (auto container = introspect::get_current_container(docker_api)) {
     host_base_state_folder =
         introspect::get_host_path_for(*container, local_base_state_folder).value_or(local_base_state_folder);
@@ -86,7 +86,7 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
         introspect::get_host_path_for(*container, host_xdg_runtime_dir).value_or(host_xdg_runtime_dir);
   } else {
     logs::log(logs::warning,
-              "Unable to get the container that is running Wolf, automatic mounts matching is disabled.");
+              "Unable to get the container that is running Heeler, automatic mounts matching is disabled.");
   }
 
   return {state::DISPLAY_CONFIGURATIONS,
@@ -132,7 +132,7 @@ std::optional<sessions::AudioServer> setup_audio_server(const std::string &host_
     return {{.server = audio_server}};
   } else {
     logs::log(logs::info, "Starting PulseAudio docker container");
-    docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
+    docker::DockerAPI docker_api(utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock"));
     auto pulse_socket = fmt::format("{}/pulse-socket", runtime_dir);
 
     /* Cleanup old leftovers, Pulse will fail to start otherwise */
@@ -147,7 +147,7 @@ std::optional<sessions::AudioServer> setup_audio_server(const std::string &host_
         docker::Container{
             .id = "",
             .name = "WolfPulseAudio",
-            .image = utils::get_env("WOLF_PULSE_IMAGE", "ghcr.io/games-on-whales/pulseaudio:master"),
+            .image = utils::get_env("HEALER_PULSE_IMAGE", "ghcr.io/games-on-whales/pulseaudio:master"),
             .status = docker::CREATED,
             .ports = {},
             .mounts = {docker::MountPoint{.source = host_runtime_dir, .destination = "/tmp/pulse/", .mode = "rw"}},
@@ -160,7 +160,7 @@ std::optional<sessions::AudioServer> setup_audio_server(const std::string &host_
                   }
             })");
     if (container && docker_api.start_by_id(container.value().id)) {
-      auto ms = std::stoi(utils::get_env("WOLF_PULSE_CONTAINER_TIMEOUT_MS", "2000"));
+      auto ms = std::stoi(utils::get_env("HEALER_PULSE_CONTAINER_TIMEOUT_MS", "2000"));
       std::this_thread::sleep_for(std::chrono::milliseconds(ms)); // TODO: Better way of knowing when ready?
       return {{.server = audio::connect(fmt::format("{}/pulse-socket", runtime_dir)), .container = container}};
     }
@@ -183,9 +183,9 @@ void run() {
   auto runtime_dir = utils::get_env("XDG_RUNTIME_DIR", "/tmp/sockets");
   logs::log(logs::debug, "XDG_RUNTIME_DIR={}", runtime_dir);
 
-  auto config_file = utils::get_env("WOLF_CFG_FILE", "config.toml");
-  auto p_key_file = utils::get_env("WOLF_PRIVATE_KEY_FILE", "key.pem");
-  auto p_cert_file = utils::get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
+  auto config_file = utils::get_env("HEALER_CFG_FILE", "config.toml");
+  auto p_key_file = utils::get_env("HEALER_PRIVATE_KEY_FILE", "key.pem");
+  auto p_cert_file = utils::get_env("HEALER_PRIVATE_CERT_FILE", "cert.pem");
   auto local_state = initialize(config_file, p_key_file, p_cert_file);
 
   // HTTP APIs
@@ -214,7 +214,7 @@ void run() {
   rtp::start_rtp_ping(state::get_port(state::VIDEO_PING_PORT),
                       state::get_port(state::AUDIO_PING_PORT),
                       local_state->event_bus);
-  // Wolf API server
+  // Heeler API server
   std::thread([local_state, runtime_dir]() { wolf::api::start_server(runtime_dir, local_state); }).detach();
 
   // mDNS
@@ -277,7 +277,7 @@ void run() {
 }
 
 int main(int argc, char *argv[]) try {
-  logs::init(logs::parse_level(utils::get_env("WOLF_LOG_LEVEL", "INFO")));
+  logs::init(logs::parse_level(utils::get_env("HEALER_LOG_LEVEL", "INFO")));
   // Graceful termination: stop all sessions/lobbies before exiting (see run()).
   std::signal(SIGINT, graceful_shutdown_handler);
   std::signal(SIGTERM, graceful_shutdown_handler);

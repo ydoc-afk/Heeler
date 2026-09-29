@@ -266,10 +266,10 @@ Config load_or_default(const std::string &source,
   ensure_interpipesrc_name(default_gst_audio_settings.default_source, "audio");
 
   auto default_gst_encoder_settings = default_gst_video_settings.defaults;
-  bool use_zero_copy = utils::get_env("WOLF_USE_ZERO_COPY", "") != std::string("FALSE");
+  bool use_zero_copy = utils::get_env("HEALER_USE_ZERO_COPY", "") != std::string("FALSE");
 
-  auto default_app_render_node = utils::get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128");
-  auto default_gst_render_node = utils::get_env("WOLF_ENCODER_NODE", default_app_render_node);
+  auto default_app_render_node = utils::get_env("HEALER_RENDER_NODE", "/dev/dri/renderD128");
+  auto default_gst_render_node = utils::get_env("HEALER_ENCODER_NODE", default_app_render_node);
   auto vendor = get_vendor(default_gst_render_node);
   if (vendor == GPU_VENDOR::UNKNOWN) {
     logs::log(logs::warning, "Unable to detect GPU vendor, disabling zero copy pipeline.");
@@ -313,7 +313,7 @@ Config load_or_default(const std::string &source,
       logs::log(logs::debug, "Required DMA formats for vapostproc: {}", required_caps);
       auto gst_caps = required_caps | //
                       ranges::views::remove_if([](const std::string &cap) {
-                        // TODO: HDR isn't supported by Wolf yet (so we remove P010 and AR30 format)
+                        // TODO: HDR isn't supported by Heeler yet (so we remove P010 and AR30 format)
                         return cap.find("P010") != std::string::npos || cap.find("AR30") != std::string::npos ||
                                // We also remove formats that are padded with spaces since they need escaping
                                cap.find(" ") != std::string::npos;

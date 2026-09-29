@@ -19,7 +19,7 @@ frame "Applications" {
   [Firefox]
 }
 
-frame "Wolf" #lightblue {
+frame "Heeler" #lightblue {
   [Gstreamer]
 }
 
@@ -52,7 +52,7 @@ frame "Applications" {
   [Firefox]
 }
 
-frame "Wolf" #lightblue {
+frame "Heeler" #lightblue {
   [Gstreamer]
   [Compositor]
 }
@@ -111,7 +111,7 @@ frame "Applications" {
   [Firefox]
 }
 
-frame "Wolf" #lightblue {
+frame "Heeler" #lightblue {
   [Compositor]
 }
 
@@ -140,7 +140,7 @@ frame "Applications" {
   [Firefox]
 }
 
-frame "Wolf" #lightblue {
+frame "Heeler" #lightblue {
   [Compositor]
 }
 
@@ -192,7 +192,7 @@ frame "Applications" {
   [Firefox]
 }
 
-frame "Wolf" #lightblue {
+frame "Heeler" #lightblue {
   [Compositor]
 }
 
@@ -244,7 +244,7 @@ frame "Applications" {
   [Steam]
 }
 
-frame "Wolf" #lightblue {
+frame "Heeler" #lightblue {
  frame "GStreamer" {
   [Compositor]
   [DMA Buffer]

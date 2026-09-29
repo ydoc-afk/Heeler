@@ -2,7 +2,7 @@
 
 == Devcontainers
 
-We provide a https://containers.dev/[devcontainer] configuration that will allow you to automatically setup a development environment for Wolf.
+We provide a https://containers.dev/[devcontainer] configuration that will allow you to automatically setup a development environment for Heeler.
 The advantage of this solution is that you'll be running the code in the exact same environment as users of the official docker image, plus you don't have to worry about setting up the dependencies manually.
 
 The following are a few quickstep to get you started on VSCode:
@@ -20,13 +20,13 @@ image::ROOT:devcontainer_pick_tools.png[]
 
 Pick the last option: `Clang ....` and you'll be ready to go.
 
-=== Build and run Wolf
+=== Build and run Heeler
 
 In the bottom left corner of the window you should see these 3 handy little buttons, respectively: build, debug and run
 
 image::ROOT:devcontainer_buttons.png[]
 
-Pressing the play button should compile and start Wolf and you should be able to see the logs in the terminal.
+Pressing the play button should compile and start Heeler and you should be able to see the logs in the terminal.
 To stop it, just press kbd:[CTRL+C] in the terminal.
 
 === Run unit tests
@@ -39,7 +39,7 @@ image::ROOT:devcontainer_tests.png[]
 == Manual installation
 
 This has been tested on Debian 12, you should adjust the setup based on your distro of choice.
-This guide will explain how to build and run Wolf outside of docker, but docker will need to be installed and configured on the host for Wolf to do anything useful.
+This guide will explain how to build and run Heeler outside of docker, but docker will need to be installed and configured on the host for Heeler to do anything useful.
 Consult your distribution's documentation for instructions on setting up Docker.
 
 == Install Nvidia driver + cuda
@@ -50,7 +50,7 @@ Please refer to https://wiki.debian.org/NvidiaGraphicsDrivers[NvidiaGraphicsDriv
 
 You also have to install Cuda, you can follow the https://developer.nvidia.com/cuda-downloads[official instructions].
 
-== Wolf dependencies
+== Heeler dependencies
 
 === Build Gstreamer
 
@@ -112,7 +112,7 @@ meson compile -C build
 meson install -C build
 ....
 
-This will install libraries and include files under `~/gstreamer`, in order for Wolf to pick this up during builing we have to setup the following env variables (you can add them at the end of `~/.bash_rc` for example)
+This will install libraries and include files under `~/gstreamer`, in order for Heeler to pick this up during builing we have to setup the following env variables (you can add them at the end of `~/.bash_rc` for example)
 
 .Custom env
 [source,bash]
@@ -161,7 +161,7 @@ export CFLAGS="$CFLAGS -I$GSTWAYLANDDISPLAY_FOLDER/include -fPIC"
 export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$GSTWAYLANDDISPLAY_FOLDER/lib/pkgconfig/"
 ....
 
-=== Install Wolf deps
+=== Install Heeler deps
 
 .Build dependencies
 [source,bash]
@@ -187,7 +187,7 @@ apt-get install -y --no-install-recommends \
     libpci-dev \
 ....
 
-== Compile Wolf
+== Compile Heeler
 
 .Compile
 [source,bash]
@@ -196,29 +196,29 @@ cmake -Bbuild -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_S
 ninja -C build
 ....
 
-If compilation completes correctly, you can finally start Wolf.
+If compilation completes correctly, you can finally start Heeler.
 The built binary can be found at `build/src/moonlight-server/wolf`
-Since Wolf is configured via a swoth of environment variables, it may be a good idea to lanch it via shell script.
+Since Heeler is configured via a swoth of environment variables, it may be a good idea to lanch it via shell script.
 
 .runwolf.sh
 [source,bash]
 ....
 #!/bin/bash
 
-: ${WOLF_CFG_FOLDER:-"config"}
+: ${HEALER_CFG_FOLDER:-"config"}
 
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/sockets}" \
-WOLF_LOG_LEVEL="${WOLF_LOG_LEVEL:-INFO}" \
-WOLF_CFG_FILE="${WOLF_CFG_FILE:-$WOLF_CFG_FOLDER/config.toml}" \
-WOLF_PRIVATE_KEY_FILE="${WOLF_PRIVATE_KEY_FILE:-$WOLF_CFG_FOLDER/key.pem}" \
-WOLF_PRIVATE_CERT_FILE="${WOLF_PRIVATE_CERT_FILE:-$WOLF_CFG_FOLDER/cert.pem}" \
-WOLF_PULSE_IMAGE="${WOLF_PULSE_IMAGE:-ghcr.io/games-on-whales/pulseaudio:master}" \
-WOLF_RENDER_NODE="${WOLF_RENDER_NODE:-/dev/dri/renderD128}" \
-WOLF_STOP_CONTAINER_ON_EXIT="${WOLF_STOP_CONTAINER_ON_EXIT:-TRUE}" \
-WOLF_DOCKER_SOCKET="${WOLF_DOCKER_SOCKET:-/var/run/docker.sock}" \
+HEALER_LOG_LEVEL="${HEALER_LOG_LEVEL:-INFO}" \
+HEALER_CFG_FILE="${HEALER_CFG_FILE:-$HEALER_CFG_FOLDER/config.toml}" \
+HEALER_PRIVATE_KEY_FILE="${HEALER_PRIVATE_KEY_FILE:-$HEALER_CFG_FOLDER/key.pem}" \
+HEALER_PRIVATE_CERT_FILE="${HEALER_PRIVATE_CERT_FILE:-$HEALER_CFG_FOLDER/cert.pem}" \
+HEALER_PULSE_IMAGE="${HEALER_PULSE_IMAGE:-ghcr.io/games-on-whales/pulseaudio:master}" \
+HEALER_RENDER_NODE="${HEALER_RENDER_NODE:-/dev/dri/renderD128}" \
+HEALER_STOP_CONTAINER_ON_EXIT="${HEALER_STOP_CONTAINER_ON_EXIT:-TRUE}" \
+HEALER_DOCKER_SOCKET="${HEALER_DOCKER_SOCKET:-/var/run/docker.sock}" \
 RUST_BACKTRACE="${RUST_BACKTRACE:-full}" \
 RUST_LOG="${RUST_LOG:-WARN}" \
-HOST_APPS_STATE_FOLDER="${HOST_APPS_STATE_FOLDER:-$WOLF_CFG_FOLDER}" \
+HOST_APPS_STATE_FOLDER="${HOST_APPS_STATE_FOLDER:-$HEALER_CFG_FOLDER}" \
 GST_DEBUG="${GST_DEBUG:-2}" \
 ./build/src/moonlight-server/wolf
 ....
