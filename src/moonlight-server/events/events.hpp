@@ -3,6 +3,7 @@
 #define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
 #define BOOST_THREAD_PROVIDES_FUTURE
 #include <boost/thread.hpp>
+#include <atomic>
 #include <boost/thread/future.hpp>
 #include <core/audio.hpp>
 #include <core/input.hpp>
@@ -457,6 +458,14 @@ struct StreamSession {
 
   std::shared_ptr<std::optional<input::PenTablet>> pen_tablet =
       std::make_shared<std::optional<input::PenTablet>>(); /* Optional, will be set on first use */
+
+  /**
+   * Sequence counter for the AES-GCM IV of outgoing encrypted control packets.
+   * GCM must never reuse an (key, IV) pair, so every outgoing control packet
+   * advances this counter (see control::encrypt_and_send). Shared (not copied)
+   * so all copies of this session and its input callbacks use the same sequence.
+   */
+  std::shared_ptr<std::atomic<std::uint32_t>> control_seq = std::make_shared<std::atomic<std::uint32_t>>(0);
 };
 
 } // namespace wolf::core::events

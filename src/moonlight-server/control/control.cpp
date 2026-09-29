@@ -84,9 +84,12 @@ bool send_packet(std::string_view payload, ENetPeer *peer) {
 
 bool encrypt_and_send(std::string_view payload,
                       std::string_view aes_key,
+                      const std::shared_ptr<std::atomic<std::uint32_t>> &seq,
                       immer::box<std::shared_ptr<ENetPeer>> connected_client) {
   if (auto enet_client = connected_client->get()) {
-    auto encrypted = control::encrypt_packet(aes_key, 0, payload); // TODO: seq?
+    // Every packet must use a fresh IV: GCM (key, IV) reuse leaks the keystream
+    // and the GHASH subkey (see Sunshine's per-message control seq)
+    auto encrypted = control::encrypt_packet(aes_key, seq->fetch_add(1), payload);
     return send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_client);
   } else {
     logs::log(logs::warning, "[ENET] Failed to send packet, client is not connected");
@@ -149,7 +152,7 @@ void run_control(int port,
         for (auto &[peer, session] : *connected_clients.load()) {
           if (session->session_id == ev->session_id) {
             immer::box<std::shared_ptr<ENetPeer>> enet_client = {to_shared_ptr(peer)};
-            encrypt_and_send(plaintext, session->aes_key, enet_client);
+            encrypt_and_send(plaintext, session->aes_key, session->control_seq, enet_client);
             return;
           }
         }
