@@ -1,13 +1,18 @@
 #pragma once
 
+#include <boost/asio/buffer.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/write.hpp>
+#include <fmt/format.h>
 #include <functional>
 #include <helpers/logger.hpp>
 #include <immer/box.hpp>
 #include <optional>
 #include <rfl.hpp>
+#include <rfl/json.hpp>
 #include <string>
+#include <string_view>
 #include <utility.hpp>
 
 namespace wolf::api {
@@ -90,10 +95,10 @@ public:
           handler(*boxed_request, socket);
         } catch (const std::exception &e) {
           logs::log(logs::error, "[API] Unhandled exception in request handler: {}", e.what());
-          send_error_response(socket, 500, e.what());
+          detail::send_error_response(socket, 500, e.what());
         } catch (...) {
           logs::log(logs::error, "[API] Unknown exception in request handler");
-          send_error_response(socket, 500, "unknown error");
+          detail::send_error_response(socket, 500, "unknown error");
         }
       });
       return true;
