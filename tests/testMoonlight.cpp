@@ -528,17 +528,15 @@ TEST_CASE("Multiple users", "[HTTP]") {
   auto app1 = events::App{.base = moonlight::App{.title = "test_app"}};
   auto client1_ip = "0.0.0.0";
   auto client1_headers = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}};
-  auto session1_opt = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
-  REQUIRE(session1_opt.has_value());
-  auto session1 = session1_opt.value();
+  auto session1 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session1);
 
   REQUIRE(session1->video_stream_port == 48100);
   REQUIRE(session1->audio_stream_port == 48200);
 
   app_state.running_sessions->update([session1](auto &sessions) { return sessions.push_back(*session1); });
-  auto session2_opt = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
-  REQUIRE(session2_opt.has_value());
-  auto session2 = session2_opt.value();
+  auto session2 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session2);
 
   REQUIRE(session2->video_stream_port == 48100);
   REQUIRE(session2->audio_stream_port == 48200);
@@ -547,9 +545,8 @@ TEST_CASE("Multiple users", "[HTTP]") {
   app_state.running_sessions->update(
       [session2](auto &sessions) { return immer::vector<events::StreamSession>{*session2}; });
   // We should now assign back the now available [48100, 48200] ports
-  auto session3_opt = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
-  REQUIRE(session3_opt.has_value());
-  auto session3 = session3_opt.value();
+  auto session3 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session3);
 
   REQUIRE(session3->video_stream_port == 48100);
   REQUIRE(session3->audio_stream_port == 48200);
@@ -559,20 +556,39 @@ TEST_CASE("Multiple users", "[HTTP]") {
     return immer::vector<events::StreamSession>{*session1, *session2, *session3};
   });
   // We should now assign the 2nd port (even if we have 3 sessions) because of port clash
-  auto session4_opt = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
-  REQUIRE(session4_opt.has_value());
-  auto session4 = session4_opt.value();
+  auto session4 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session4);
 
   REQUIRE(session4->video_stream_port == 48100);
   REQUIRE(session4->audio_stream_port == 48200);
 
-  // Missing rikey/rikeyid must yield nullopt, not a crash
+  // Missing rikey/rikeyid must yield nullptr, not a crash
   auto no_keys = SimpleWeb::CaseInsensitiveMultimap{};
-  REQUIRE_FALSE(endpoints::https::create_run_session(no_keys, client1_ip, client1, app_state, app1).has_value());
+  REQUIRE(endpoints::https::create_run_session(no_keys, client1_ip, client1, app_state, app1) == nullptr);
 
   // Malformed mode/surroundAudioInfo must not crash, falls back to the defaults
-  auto bad_mode =
-      SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}, {"mode", "abc"}, {"surroundAudioInfo", "xyz"}};
+  auto bad_mode = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"},
+                                                     {"rikeyid", "5678"},
+                                                     {"mode", "abc"},
+                                                     {"surroundAudioInfo", "xyz"}};
   auto bad_mode_session = endpoints::https::create_run_session(bad_mode, client1_ip, client1, app_state, app1);
-  REQUIRE(bad_mode_session.has_value());
+  REQUIRE(bad_mode_session);
+  REQUIRE(bad_mode_session->display_mode.width == 1920);
+  REQUIRE(bad_mode_session->display_mode.height == 1080);
+  REQUIRE(bad_mode_session->display_mode.refreshRate == 60);
+  REQUIRE(bad_mode_session->audio_channel_count == 2);
+
+  // A "mode" with the wrong number of components is also rejected in favour of the default
+  auto short_mode = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}, {"mode", "1280x720"}};
+  auto short_mode_session = endpoints::https::create_run_session(short_mode, client1_ip, client1, app_state, app1);
+  REQUIRE(short_mode_session);
+  REQUIRE(short_mode_session->display_mode.width == 1920);
+
+  // Well formed values are honoured
+  auto good_mode = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}, {"mode", "1280x720x30"}};
+  auto good_mode_session = endpoints::https::create_run_session(good_mode, client1_ip, client1, app_state, app1);
+  REQUIRE(good_mode_session);
+  REQUIRE(good_mode_session->display_mode.width == 1280);
+  REQUIRE(good_mode_session->display_mode.height == 720);
+  REQUIRE(good_mode_session->display_mode.refreshRate == 30);
 }

@@ -380,7 +380,7 @@ void appasset(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>
   }
 }
 
-std::optional<std::shared_ptr<events::StreamSession>> create_run_session(
+std::shared_ptr<events::StreamSession> create_run_session(
     const SimpleWeb::CaseInsensitiveMultimap &headers,
     const std::string &client_ip,
     const state::PairedClient &current_client,
@@ -390,7 +390,7 @@ std::optional<std::shared_ptr<events::StreamSession>> create_run_session(
   auto rikeyid = get_header(headers, "rikeyid");
   if (!rikey || !rikeyid) {
     logs::log(logs::warning, "[HTTPS] launch/resume request missing rikey/rikeyid");
-    return std::nullopt;
+    return nullptr;
   }
 
   // mode is untrusted input ("1920x1080x60"): fall back to the default on anything malformed
