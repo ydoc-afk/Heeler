@@ -1,6 +1,6 @@
 R"for_c++_include(
 # The name that will be displayed in Moonlight
-hostname = "Wolf"
+hostname = "Heeler"
 # The version of this config file
 config_version = 7
 # A list of paired clients that will be allowed to stream
@@ -372,7 +372,7 @@ video/x-raw(memory:VAMemory), format=NV12, width={width}, height={height}, pixel
 
 ######################
 # HEVC encoders
-# Order here matters: Wolf will try them in order and pick the first one that's not failing
+# Order here matters: Heeler will try them in order and pick the first one that's not failing
 ###
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "nvcodec"
@@ -434,7 +434,7 @@ video/x-h265, profile=main, stream-format=byte-stream\
 
 ######################
 # H264 encoders
-# Order here matters: Wolf will try them in order and pick the first one that's not failing
+# Order here matters: Heeler will try them in order and pick the first one that's not failing
 ###
 [[gstreamer.video.h264_encoders]]
 plugin_name = "nvcodec"

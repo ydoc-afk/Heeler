@@ -116,7 +116,7 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache,mode=max
 
-      - name: Build Wolf
+      - name: Build Heeler
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}

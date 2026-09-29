@@ -1,5 +1,5 @@
 # The name that will be displayed in Moonlight
-hostname = "Wolf"
+hostname = "Heeler"
 # A unique identifier for this host
 uuid = "0000-1111-2222-3333"
 # Set to false if this host doesn't support HEVC
@@ -84,7 +84,7 @@ defaults = { "coreelements" = { "video_params" = "default", "video_params_zero_c
 
 ######################
 # AV1 encoders
-# Order here matters: Wolf will try them in order and pick the first one that's not failing
+# Order here matters: Heeler will try them in order and pick the first one that's not failing
 ###
 [[gstreamer.video.av1_encoders]]
 plugin_name = "a-non-existing-plugin"
@@ -101,7 +101,7 @@ encoder_pipeline = "av1_pipeline"
 
 ######################
 # HEVC encoders
-# Order here matters: Wolf will try them in order and pick the first one that's not failing
+# Order here matters: Heeler will try them in order and pick the first one that's not failing
 ###
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "a-non-existing-plugin"
@@ -117,7 +117,7 @@ encoder_pipeline = "hevc_pipeline"
 
 ######################
 # H264 encoders
-# Order here matters: Wolf will try them in order and pick the first one that's not failing
+# Order here matters: Heeler will try them in order and pick the first one that's not failing
 ###
 [[gstreamer.video.h264_encoders]]
 plugin_name = "a-non-existing-plugin"

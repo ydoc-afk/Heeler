@@ -13,7 +13,7 @@ using namespace wolf::core;
 void start_server(std::string_view runtime_dir, immer::box<state::AppState> app_state) {
   auto default_socket_path = std::filesystem::path(runtime_dir) / "wolf.sock";
   auto socket_path = utils::get_env("WOLF_SOCKET_PATH", default_socket_path.c_str());
-  logs::log(logs::info, "Starting Wolf API server on {}", socket_path);
+  logs::log(logs::info, "Starting Heeler API server on {}", socket_path);
 
   ::unlink(socket_path);
   boost::asio::io_context io_context;

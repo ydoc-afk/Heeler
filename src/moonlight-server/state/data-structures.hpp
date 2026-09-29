@@ -115,7 +115,7 @@ struct Host {
   std::string host_base_state_folder;
 
   /**
-   * The path in the current Wolf context (probably a container) where we are allowed to store data
+   * The path in the current Heeler context (probably a container) where we are allowed to store data
    */
   std::string local_base_state_folder;
 

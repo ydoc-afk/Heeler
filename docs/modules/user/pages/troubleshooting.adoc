@@ -2,14 +2,14 @@
 
 [TIP]
 ====
-When something doesn't work it'll be helpful to be able to see the logs from Wolf, please change the env variable `WOLF_LOG_LEVEL` to `DEBUG` and try to replicate the issue.
+When something doesn't work it'll be helpful to be able to see the logs from Heeler, please change the env variable `WOLF_LOG_LEVEL` to `DEBUG` and try to replicate the issue.
 ====
 
 == Black screen in Moonlight
 
-If it's the very first time that you are running an app, and you can only see a black screen with a cursor in Moonlight, it's probably because Wolf is downloading the corresponding docker image and installing first time updates (when necessary).
+If it's the very first time that you are running an app, and you can only see a black screen with a cursor in Moonlight, it's probably because Heeler is downloading the corresponding docker image and installing first time updates (when necessary).
 
-If this persists or Moonlight kicks you out of the streaming session then you should probably take a look at the Wolf logs to gather more informations.
+If this persists or Moonlight kicks you out of the streaming session then you should probably take a look at the Heeler logs to gather more informations.
 
 === Vulkan errors in App
 
@@ -70,14 +70,14 @@ terminate called after throwing an instance of 'boost::wrapexcept<boost::system:
 INFO  | Received interrupt signal 6, clean exit
 ....
 
-This means that some other process is using the same ports that Wolf needs in order to communicate with Moonlight.
+This means that some other process is using the same ports that Heeler needs in order to communicate with Moonlight.
 
 [TIP]
 ====
 Have you left Sunshine running in the background?
 ====
 
-The following ports need to be available in order for Wolf to work:
+The following ports need to be available in order for Heeler to work:
 
 * 47984/tcp - HTTPS
 * 47989/tcp - HTTP
@@ -132,12 +132,12 @@ echo 'uhid' | sudo tee /etc/modules-load.d/uhid.conf
 
 If your controller works inside the streamed game *but also* moves the host's
 mouse pointer / presses buttons on the host desktop (for example a DualSense
-touchpad moving the host cursor), the virtual devices Wolf created are not
+touchpad moving the host cursor), the virtual devices Heeler created are not
 isolated from your logged-in host session.
 
 This is almost always because the udev rules from the
 xref:user:quickstart.adoc#_virtual_devices_support[Virtual devices support]
-section are missing, out of date, or don't match your controller. Wolf's
+section are missing, out of date, or don't match your controller. Heeler's
 virtual pads appear as real devices in the *host* kernel, and without the rules
 `systemd-logind` grants your desktop user access to them (`uaccess`).
 
@@ -164,7 +164,7 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 [TIP]
 ====
-The bundled rules match every Wolf device by the `Wolf *virtual*` name glob, so
+The bundled rules match every Heeler device by the `Wolf *virtual*` name glob, so
 they keep working even if a controller's exact product name changes. If you
 maintain your own rules, prefer the glob over hard-coded names — an out-of-date
 name (e.g. `Wolf PS5 (virtual) pad` after it was renamed to

@@ -128,7 +128,7 @@ void RunDocker::run(std::string_view session_id,
     }
   }
 
-  { // Setup Wolf socket path (if the runner needs it, and it hasn't been overridden via ENV)
+  { // Setup Heeler socket path (if the runner needs it, and it hasn't been overridden via ENV)
     auto socket_path_container_env = std::find_if(full_env.begin(), full_env.end(), [](const std::string &env) {
       return env.find("WOLF_SOCKET_PATH") != std::string::npos;
     });

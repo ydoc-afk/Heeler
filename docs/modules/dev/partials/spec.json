@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Wolf API",
-    "description": "API for the Wolf server",
+    "title": "Heeler API",
+    "description": "API for the Heeler server",
     "version": "0.1"
   },
   "servers": [
