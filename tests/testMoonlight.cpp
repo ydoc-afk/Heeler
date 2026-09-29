@@ -558,3 +558,16 @@ TEST_CASE("Multiple users", "[HTTP]") {
   REQUIRE(session4->video_stream_port == 48100);
   REQUIRE(session4->audio_stream_port == 48200);
 }
+
+TEST_CASE("Ports can be overridden by env vars", "[LocalState]") {
+  REQUIRE(state::get_port(state::HTTP_PORT) == state::HTTP_PORT);
+
+  setenv("HEALER_HTTP_PORT", "12345", 1);
+  REQUIRE(state::get_port(state::HTTP_PORT) == 12345);
+
+  // A typo must not throw (this runs at startup): fall back to the default
+  setenv("HEALER_HTTP_PORT", "not-a-port", 1);
+  REQUIRE(state::get_port(state::HTTP_PORT) == state::HTTP_PORT);
+
+  unsetenv("HEALER_HTTP_PORT");
+}
