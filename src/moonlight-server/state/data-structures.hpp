@@ -47,7 +47,7 @@ inline int get_port(STANDARD_PORTS_MAPPING port) {
       try {
         return std::stoi(env);
       } catch (const std::exception &) {
-        // A typo'd WOLF_*_PORT must not take the server down at startup
+        // A typo'd HEALER_*_PORT must not take the server down at startup
         logs::log(logs::error, "Invalid value for {} ('{}'), using default port {}", env_name, env, default_port);
       }
     }
@@ -55,18 +55,19 @@ inline int get_port(STANDARD_PORTS_MAPPING port) {
   };
   switch (port) {
   case HTTPS_PORT:
-    return from_env("WOLF_HTTPS_PORT", HTTPS_PORT);
+    return from_env("HEALER_HTTPS_PORT", HTTPS_PORT);
   case HTTP_PORT:
-    return from_env("WOLF_HTTP_PORT", HTTP_PORT);
+    return from_env("HEALER_HTTP_PORT", HTTP_PORT);
   case CONTROL_PORT:
-    return from_env("WOLF_CONTROL_PORT", CONTROL_PORT);
+    return from_env("HEALER_CONTROL_PORT", CONTROL_PORT);
   case VIDEO_PING_PORT:
-    return from_env("WOLF_VIDEO_PING_PORT", VIDEO_PING_PORT);
+    return from_env("HEALER_VIDEO_PING_PORT", VIDEO_PING_PORT);
   case AUDIO_PING_PORT:
-    return from_env("WOLF_AUDIO_PING_PORT", AUDIO_PING_PORT);
+    return from_env("HEALER_AUDIO_PING_PORT", AUDIO_PING_PORT);
   case RTSP_SETUP_PORT:
-    return from_env("WOLF_RTSP_SETUP_PORT", RTSP_SETUP_PORT);
+    return from_env("HEALER_RTSP_SETUP_PORT", RTSP_SETUP_PORT);
   }
+
   return -1;
 }
 
@@ -126,7 +127,7 @@ struct Host {
   std::string host_base_state_folder;
 
   /**
-   * The path in the current Wolf context (probably a container) where we are allowed to store data
+   * The path in the current Heeler context (probably a container) where we are allowed to store data
    */
   std::string local_base_state_folder;
 

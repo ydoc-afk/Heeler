@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# wolf-input-diag.sh — validate controller/input passthrough into Wolf containers.
+# wolf-input-diag.sh — validate controller/input passthrough into Heeler containers.
 #
 # Answers two questions the operator actually cares about:
 #   (A) ISOLATION  — is one session's controller input leaking into another
@@ -8,8 +8,8 @@
 #   (B) DELIVERY   — is the controller actually producing events inside the
 #                    container it is *supposed* to be in?
 #
-# How it works (black-box, host-side — no Wolf source or API needed):
-#   * Wolf builds each session's virtual gamepad/mouse/keyboard as a distinct
+# How it works (black-box, host-side — no Heeler source or API needed):
+#   * Heeler builds each session's virtual gamepad/mouse/keyboard as a distinct
 #     evdev/uhid device with a unique MAJOR:MINOR, and mknod's it into ONLY the
 #     matching session_id's container. So:
 #       - the SAME major:minor visible in >1 container  => structural leak  (A)
@@ -21,19 +21,19 @@
 #     joined to per-container nodes by major:minor.
 #   * Reads are non-destructive: we never EVIOCGRAB, so the game keeps its input.
 #
-# Requirements on the Wolf HOST: bash, docker (or set DOCKER=podman), coreutils.
+# Requirements on the Heeler HOST: bash, docker (or set DOCKER=podman), coreutils.
 # No evtest / jq / evemu needed.
 #
 # Usage:
-#   wolf-input-diag.sh host                  # HOST-LEAK audit: are Wolf pads reachable by the desktop user?
-#   wolf-input-diag.sh discover              # list Wolf containers + their input devices
+#   wolf-input-diag.sh host                  # HOST-LEAK audit: are Heeler pads reachable by the desktop user?
+#   wolf-input-diag.sh discover              # list Heeler containers + their input devices
 #   wolf-input-diag.sh static                # isolation check: any node shared across containers?
 #   wolf-input-diag.sh monitor [SECS]        # live: press pads, watch which container lights up
 #   wolf-input-diag.sh live <container> [SECS]   # targeted A+B test against one container
 #   wolf-input-diag.sh all                   # host + discover + static, then hint at live tests
 #
 # The `host` audit is the one that catches the real-world "DualSense input leaks
-# into host" class of bug (games-on-whales/wolf#451): a Wolf virtual device whose
+# into host" class of bug (games-on-whales/wolf#451): a Heeler virtual device whose
 # name is NOT matched by /etc/udev/rules.d/85-wolf.rules keeps logind's default
 # `uaccess` ACL, so the host's logged-in desktop user can read the controller.
 #
@@ -49,14 +49,14 @@ ok()   { printf '  \033[32m✓ %s\033[0m\n' "$*"; }
 warn() { printf '  \033[33m! %s\033[0m\n' "$*"; }
 bad()  { printf '  \033[31m✗ %s\033[0m\n' "$*"; }
 
-need_docker() { command -v "$DOCKER" >/dev/null 2>&1 || die "'$DOCKER' not found. Run this on the Wolf host (set DOCKER=podman if needed)."; }
+need_docker() { command -v "$DOCKER" >/dev/null 2>&1 || die "'$DOCKER' not found. Run this on the Heeler host (set DOCKER=podman if needed)."; }
 
 # ---------------------------------------------------------------------------
 # Discovery
 # ---------------------------------------------------------------------------
 
 # Print "CONTAINER_ID\tNAME\tWOLF_SESSION_ID" for every running container that
-# looks Wolf-managed (has a WOLF_SESSION_ID env var). The Wolf server container
+# looks Heeler-managed (has a WOLF_SESSION_ID env var). The Heeler server container
 # itself has no session id; include it too, tagged "server", since it is where
 # the virtual devices are actually created.
 discover_containers() {
@@ -109,10 +109,10 @@ host_name_for() {
 }
 
 # ---------------------------------------------------------------------------
-# HOST-LEAK audit (the wolf#451 class): can the desktop user reach a Wolf pad?
+# HOST-LEAK audit (the wolf#451 class): can the desktop user reach a Heeler pad?
 # ---------------------------------------------------------------------------
 
-# List every host input/hidraw device that Wolf created (name starts with "Wolf").
+# List every host input/hidraw device that Heeler created (name starts with "Wolf").
 # Emits: NODE<TAB>MAJ:MIN<TAB>NAME<TAB>IS_TOUCHPAD(0/1)
 host_wolf_devices() {
   local d dev name tp node
@@ -175,7 +175,7 @@ rule_matches_name() {
 }
 
 cmd_host() {
-  info "== Host-leak audit: are Wolf virtual devices isolated from the host desktop? =="
+  info "== Host-leak audit: are Heeler virtual devices isolated from the host desktop? =="
   echo "   Rules file: $RULES_FILE"
   [ -r "$RULES_FILE" ] || warn "rules file not readable — cannot cross-check name coverage."
   echo
@@ -214,7 +214,7 @@ cmd_host() {
   elif [ "$uncovered" -gt 0 ]; then
     warn "$uncovered device(s) are locked but not explicitly rule-covered — update 85-wolf.rules to be safe."
   else
-    ok "All Wolf devices are root-only and rule-covered. No host leak."
+    ok "All Heeler devices are root-only and rule-covered. No host leak."
   fi
 }
 
@@ -224,7 +224,7 @@ cmd_host() {
 
 cmd_discover() {
   need_docker
-  info "== Wolf containers and their input devices =="
+  info "== Heeler containers and their input devices =="
   local any=0
   while IFS=$'\t' read -r id name sid role; do
     any=1
@@ -239,7 +239,7 @@ cmd_discover() {
       printf '    %-22s %-8s %s\n' "$path" "$mm" "$(host_name_for "$mm")"
     done <<< "$nodes"
   done < <(discover_containers)
-  [ "$any" = 1 ] || warn "No Wolf-managed containers found (are any sessions running?)."
+  [ "$any" = 1 ] || warn "No Heeler-managed containers found (are any sessions running?)."
 }
 
 # STATIC isolation check (A): fail if any major:minor exists in >1 container.
@@ -323,7 +323,7 @@ cmd_live() {
   need_docker
   local target="${1:?usage: live <container-name> [secs]}"; local dur="${2:-$DUR_DEFAULT}"
   # verify target exists
-  discover_containers | cut -f2 | grep -qx "$target" || die "'$target' is not a running Wolf container (see: $0 discover)."
+  discover_containers | cut -f2 | grep -qx "$target" || die "'$target' is not a running Heeler container (see: $0 discover)."
   info "== Targeted test against '$target' =="
   echo "   Actuate the controller for THIS session for ${dur}s now..."
   echo

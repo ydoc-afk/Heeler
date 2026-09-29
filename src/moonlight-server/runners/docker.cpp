@@ -63,7 +63,7 @@ void RunDocker::run(std::string_view session_id,
   // Fake udev
   auto udev_base_path = std::filesystem::path(app_state_folder) / "udev";
   auto hw_db_path = udev_base_path / "data";
-  auto fake_udev_cli_path = std::string(utils::get_env("WOLF_DOCKER_FAKE_UDEV_PATH", ""));
+  auto fake_udev_cli_path = std::string(utils::get_env("HEALER_DOCKER_FAKE_UDEV_PATH", ""));
   bool use_fake_udev = !fake_udev_cli_path.empty();
   if (use_fake_udev) {
     logs::log(logs::debug, "[DOCKER] Using fake-udev, creating {}", hw_db_path.string());
@@ -79,7 +79,7 @@ void RunDocker::run(std::string_view session_id,
     }
   } else {
     logs::log(logs::warning,
-              "[DOCKER] Unable to use fake-udev, check the env variable WOLF_DOCKER_FAKE_UDEV_PATH and the file at {}",
+              "[DOCKER] Unable to use fake-udev, check env var HEALER_DOCKER_FAKE_UDEV_PATH and the file at {}",
               fake_udev_cli_path);
   }
 
@@ -128,7 +128,7 @@ void RunDocker::run(std::string_view session_id,
     }
   }
 
-  { // Setup Wolf socket path (if the runner needs it, and it hasn't been overridden via ENV)
+  { // Setup Heeler socket path (if the runner needs it, and it hasn't been overridden via ENV)
     auto socket_path_container_env = std::find_if(full_env.begin(), full_env.end(), [](const std::string &env) {
       return env.find("WOLF_SOCKET_PATH") != std::string::npos;
     });
@@ -291,7 +291,7 @@ void RunDocker::run(std::string_view session_id,
         .session_id = std::string(session_id),
     }});
 
-    if (const auto env = utils::get_env("WOLF_STOP_CONTAINER_ON_EXIT")) {
+    if (const auto env = utils::get_env("HEALER_STOP_CONTAINER_ON_EXIT")) {
       if (std::string(env) == "TRUE") {
         docker_api.stop_by_id(container_id);
         docker_api.remove_by_id(container_id);
