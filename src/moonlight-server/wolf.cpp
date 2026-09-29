@@ -223,12 +223,17 @@ void run() {
     try {
       mdns_cpp::Logger::setLoggerSink([](const std::string &msg) {
         // msg here will include a /n at the end, so we remove it
-        logs::log(logs::trace, "mDNS: {}", msg.substr(0, msg.size() - 1));
+        auto trimmed = msg;
+        while (!trimmed.empty() && (trimmed.back() == '\n' || trimmed.back() == '\r'))
+          trimmed.pop_back();
+        if (!trimmed.empty())
+          logs::log(logs::trace, "mDNS: {}", trimmed);
       });
       mdns_cpp::mDNS mdns;
       mdns.setServiceName("_nvstream._tcp.local.");
       mdns.setServiceHostname(hostname);
-      mdns.setServicePort(state::HTTP_PORT);
+      // Respect WOLF_HTTP_PORT like every other server does
+      mdns.setServicePort(state::get_port(state::HTTP_PORT));
       mdns.startService(false);
     } catch (const std::exception &e) {
       logs::log(logs::error, "mDNS error: {}", e.what());

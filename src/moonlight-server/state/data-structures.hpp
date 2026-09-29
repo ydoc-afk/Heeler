@@ -42,19 +42,30 @@ enum STANDARD_PORTS_MAPPING {
 };
 
 inline int get_port(STANDARD_PORTS_MAPPING port) {
+  auto from_env = [](const char *env_name, int default_port) {
+    if (const char *env = utils::get_env(env_name)) {
+      try {
+        return std::stoi(env);
+      } catch (const std::exception &) {
+        // A typo'd WOLF_*_PORT must not take the server down at startup
+        logs::log(logs::error, "Invalid value for {} ('{}'), using default port {}", env_name, env, default_port);
+      }
+    }
+    return default_port;
+  };
   switch (port) {
   case HTTPS_PORT:
-    return utils::get_env("WOLF_HTTPS_PORT") ? std::stoi(utils::get_env("WOLF_HTTPS_PORT")) : HTTPS_PORT;
+    return from_env("WOLF_HTTPS_PORT", HTTPS_PORT);
   case HTTP_PORT:
-    return utils::get_env("WOLF_HTTP_PORT") ? std::stoi(utils::get_env("WOLF_HTTP_PORT")) : HTTP_PORT;
+    return from_env("WOLF_HTTP_PORT", HTTP_PORT);
   case CONTROL_PORT:
-    return utils::get_env("WOLF_CONTROL_PORT") ? std::stoi(utils::get_env("WOLF_CONTROL_PORT")) : CONTROL_PORT;
+    return from_env("WOLF_CONTROL_PORT", CONTROL_PORT);
   case VIDEO_PING_PORT:
-    return utils::get_env("WOLF_VIDEO_PING_PORT") ? std::stoi(utils::get_env("WOLF_VIDEO_PING_PORT")) : VIDEO_PING_PORT;
+    return from_env("WOLF_VIDEO_PING_PORT", VIDEO_PING_PORT);
   case AUDIO_PING_PORT:
-    return utils::get_env("WOLF_AUDIO_PING_PORT") ? std::stoi(utils::get_env("WOLF_AUDIO_PING_PORT")) : AUDIO_PING_PORT;
+    return from_env("WOLF_AUDIO_PING_PORT", AUDIO_PING_PORT);
   case RTSP_SETUP_PORT:
-    return utils::get_env("WOLF_RTSP_SETUP_PORT") ? std::stoi(utils::get_env("WOLF_RTSP_SETUP_PORT")) : RTSP_SETUP_PORT;
+    return from_env("WOLF_RTSP_SETUP_PORT", RTSP_SETUP_PORT);
   }
   return -1;
 }
