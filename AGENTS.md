@@ -141,6 +141,44 @@ See `docs/modules/dev/pages/how-it-works.adoc` for the full picture.
   - `api/` — a separate control API over a Unix socket (`unix_socket_server.cpp`) with an OpenAPI spec
     (`openapi.cpp`), used by external tools (e.g. wolf-ui). Distinct from the Moonlight-facing `rest/`.
 
+## Conventions & pitfalls
+
+Learned from the codebase itself — read before touching the areas below:
+
+- **Exceptions are fatal by design (mostly).** Uncaught exceptions inside Simple-Web-Server
+  resource handlers, the Wolf API thread pool (`api/http_server.hpp`), boost::asio async
+  lambdas, or event-bus handlers propagate out and `std::terminate` the whole process. There is
+  no central try/catch. When handling untrusted input (query headers, JSON bodies, env vars),
+  prefer `value_or` / validated parsing over `optional::value()` and `std::stoi`.
+- **Event bus** (`dp::eventbus`): `fire_event` is *synchronous* (handlers run on the firing
+  thread) and nested `fire_event` from inside a handler is common (lobbies do it constantly) —
+  handlers must stay short and non-blocking; long work goes to `std::thread(...).detach()`. The
+  returned `EventBusHandlers` is RAII: unregistered when it goes out of scope, so keep it alive
+  exactly as long as the handler must stay armed (a local in a blocking `run()` loop is the
+  usual pattern).
+- **Protocol reference implementation:** for Moonlight packet layouts (control packets, RTP
+  video header/FEC, GCM IV construction), the [Sunshine server](https://github.com/LizardByte/Sunshine)
+  is the de-facto reference (e.g. `src/stream.cpp` for the video/FEC header, `session` control
+  seq handling). When in doubt about a wire format, diff against it before "fixing" wolf —
+  several wolf layouts intentionally match it (e.g. `multiFecBlocks = (block << 4) | (nblocks-1) << 6`).
+- **Crypto helpers are non-throwing on purpose-ish:** `crypto::handle_openssl_error`
+  (`src/moonlight-protocol/crypto/src/utils.cpp`) only prints and returns; `aes::init`/`create_key`
+  can therefore return a broken/null context that callers must not assume is valid. New crypto
+  code should check return values explicitly.
+- **Config is both runtime state and a file.** `state::pair`/`unpair`/`update_*` mutate the
+  in-memory `immer` atom *and* rewrite `config.toml` via reflect-cpp. Keep both in sync in any
+  new mutation (see the duplicate-entry history in `pair()`, issue #211).
+- **GStreamer pipelines are config strings** built with `fmt::format(fmt::runtime(...))` from
+  `config.toml` (placeholders like `{session_id}`, `{client_ip}`). `run_pipeline`
+  (`streaming/streaming.hpp`) blocks on its own `GMainLoop` per thread; the `on_pipeline_ready`
+  callback runs synchronously before the loop starts and its returned handlers are unregistered
+  when the loop exits.
+- **`src/core` platform split:** anything platform-specific needs a `platforms/unknown` no-op
+  stub so non-Linux builds keep compiling (see `platforms/all` vs `platforms/linux`).
+- **Testing:** `tests/` is Catch2; protocol/packet tests live in `testControl.cpp`/
+  `testMoonlight.cpp` — when changing packet structs, check the packed layouts there and in
+  `src/moonlight-protocol/moonlight/control.hpp` (`#pragma pack(push, 1)`).
+
 ## Runtime configuration (env vars)
 
 Behavior is driven by `WOLF_*` env vars read via `utils::get_env` (full working set in `wolf.cpp` and
