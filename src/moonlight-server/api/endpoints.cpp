@@ -619,7 +619,7 @@ void UnixSocketServer::endpoint_DockerInspectImage(const HTTPRequest &req, std::
     return;
   }
 
-  docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
+  docker::DockerAPI docker_api(utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock"));
   if (auto response = docker_api.inspect_image(image_name[1])) {
     send_http(socket, 200, response.value());
   } else {
@@ -633,7 +633,7 @@ void UnixSocketServer::endpoint_DockerPullImage(const HTTPRequest &req, std::sha
   if (input_payload) {
     // TODO: implement coroutines for CURL
     std::thread([this, socket, image = input_payload.value().image_name]() {
-      docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
+      docker::DockerAPI docker_api(utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock"));
       bool first_send = true;
       broadcast_event("DockerPullImageStartEvent",
                       rfl::json::write(events::DockerPullImageStartEvent{.image_name = image}));

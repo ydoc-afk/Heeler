@@ -32,7 +32,7 @@ setup_pulseaudio_router_handlers(const immer::box<state::AppState> &app_state,
     return handlers.persistent();
   }
 
-  // Register handlers (Wolf pattern: store registrations in `handlers`)
+  // Register handlers (Heeler pattern: store registrations in `handlers`)
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::DockerContainerCreated>>(
       [state](const immer::box<events::DockerContainerCreated> &ev) {
         if (state)

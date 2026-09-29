@@ -11,14 +11,14 @@ image::ROOT:hotplug_demo.gif[Hotplug demo gif]
 
 == Mount virtual devices
 
-Wolf creates virtual devices on-demand based on the packets that are received from Moonlight clients over the xref:protocols:control-specs.adoc[control stream]. +
+Heeler creates virtual devices on-demand based on the packets that are received from Moonlight clients over the xref:protocols:control-specs.adoc[control stream]. +
 When a new virtual device is created, we have to "mount" it inside the right running Docker container since, in order to achieve isolation, we can't run them with the https://docs.docker.com/engine/reference/commandline/run/#privileged[privileged flag].
 
 Normally, Docker assigns devices available to a container at creation time.
 Fortunately, it supports a more permissive rule that allows to access a wider range of devices based on the device https://www.oreilly.com/library/view/linux-device-drivers/0596000081/ch03s02.html[major:minor].
 By adding the https://docs.docker.com/engine/reference/commandline/run/#device-cgroup-rule[--device-cgroup-rule] we can then call `mknod` footnote:[This obviously requires also the `MKNOD` capability to be enabled (`--cap-add MKNOD`)] from inside the container in order to mount the virtual devices on-demand from the outside.
 
-.Example Docker command issued by Wolf
+.Example Docker command issued by Heeler
 [source,bash]
 ....
 docker exec -it <App_Container> sh -c "mknod /dev/input/<device name> c <major>:<minor>"
@@ -57,7 +57,7 @@ MINOR=0
 The first approach is to just pass the udev socket (and db files, more on this later) from the host.
 Sure, every application will get the event that a new device has been plugged, so this kind of defeats isolation; but since we are mounting only in one container, this should still work, right?
 
-Unfortunately, there's another issue: when Wolf creates a new virtual device, it will in turn automatically trigger the udev event to be "broadcast" to every listening application and if this happens before we are able to `mknod` the device it'll result in an application that can't access the device that we've created.
+Unfortunately, there's another issue: when Heeler creates a new virtual device, it will in turn automatically trigger the udev event to be "broadcast" to every listening application and if this happens before we are able to `mknod` the device it'll result in an application that can't access the device that we've created.
 
 We want to be able to be in control of exactly when these events will be sent so that the flow is as follows:
 
@@ -67,7 +67,7 @@ We want to be able to be in control of exactly when these events will be sent so
 title: New device flow
 autonumber
 
-participant Wolf as W
+participant Heeler as W
 participant uinput as I
 participant App as A
 participant udev as U
@@ -126,7 +126,7 @@ UDEV  [3931.403835] add      /devices/bomb  (input)
 title: New device flow
 autonumber
 
-participant Wolf as W
+participant Heeler as W
 participant App as A
 
 
