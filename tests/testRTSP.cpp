@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 using Catch::Matchers::Equals;
@@ -640,15 +641,14 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
   }
 }
 TEST_CASE("Multi-chunk message assembly", "[RTSP]") {
-  // A message arriving split across two TCP reads must be reassembled without
-  // duplicating the first chunk or truncating the tail (streambuf handling in
-  // tcp_connection::receive_message).
-  auto body = "v=0\n"
-              "o=android 0 14 IN IPv4 192.168.1.227\n"
-              "s=NVIDIA Streaming Client\n"
-              "a=x-nv-video[0].clientViewportWd:1920\n"
-              "a=x-nv-video[0].clientViewportHt:1080\n"
-              "a=x-nv-video[0].maxFPS:60\n";
+  // A message arriving split across two TCP reads must be fully reassembled, without losing the end of the payload
+  // (see tcp_connection::receive_message).
+  std::string body = "v=0\n"
+                     "o=android 0 14 IN IPv4 192.168.1.227\n"
+                     "s=NVIDIA Streaming Client\n"
+                     "a=x-nv-video[0].clientViewportWd:1920\n"
+                     "a=x-nv-video[0].clientViewportHt:1080\n"
+                     "a=x-nv-video[0].maxFPS:60\n";
 
   std::string msg = "ANNOUNCE streamid=control/13/0 RTSP/1.0\r\n"
                     "CSeq: 6\r\n"
@@ -660,8 +660,19 @@ TEST_CASE("Multi-chunk message assembly", "[RTSP]") {
                     "\r\n" +
                     body;
 
-  // Split in the middle of the body, once the Content-length header is already visible
-  auto split_at = msg.find("\r\n\r\n") + 4 + body.size() / 2;
+  // Where the TCP stream is cut in two reads. The old length computation was 2 bytes short and didn't cope with a
+  // Content-length header that was itself split across reads: both lost the end of the message.
+  auto split = GENERATE("in the middle of the body", "before the last 2 bytes", "inside the Content-length value");
+  INFO("split " << split);
+  auto header_end = msg.find("\r\n\r\n") + 4;
+  size_t split_at = 0;
+  if (split == "in the middle of the body"s) {
+    split_at = header_end + body.size() / 2;
+  } else if (split == "before the last 2 bytes"s) {
+    split_at = msg.size() - 2;
+  } else {
+    split_at = msg.find("Content-length: ") + std::string("Content-length: ").size() + 1;
+  }
   auto first_chunk = msg.substr(0, split_at);
   auto second_chunk = msg.substr(split_at);
 
@@ -671,8 +682,11 @@ TEST_CASE("Multi-chunk message assembly", "[RTSP]") {
   tcp::acceptor acceptor(ioc, tcp::endpoint(tcp::v4(), 0));
   auto port = acceptor.local_endpoint().port();
 
-  // Receiver side: a tcp_connection whose socket is connected to our acceptor
+  // Receiver side: a tcp_connection connected to our acceptor
   auto tester = tcp_tester::create_client(ioc, port, state);
+  // Sender side: the accepted end of that same connection
+  tcp::socket sender(ioc);
+  acceptor.accept(sender);
 
   std::optional<RTSP_PACKET> parsed;
   std::promise<void> done;
@@ -683,32 +697,26 @@ TEST_CASE("Multi-chunk message assembly", "[RTSP]") {
     done.set_value();
   });
 
-  // Client side: deliver the message in two separate writes
-  tcp::socket client(ioc);
-  asio::connect(client, acceptor.local_endpoint());
-  tcp::socket server_side(ioc);
-  acceptor.async_accept(server_side, [](auto ec) {});
+  // Run the io_context on a separate thread for the whole exchange
+  auto work_guard = asio::make_work_guard(ioc);
+  std::thread pump([&ioc] { ioc.run(); });
 
-  asio::write(client, asio::buffer(first_chunk));
+  // Deliver the message in two separate writes
+  asio::write(sender, asio::buffer(first_chunk));
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  asio::write(client, asio::buffer(second_chunk));
+  asio::write(sender, asio::buffer(second_chunk));
 
-  // Pump the io_context on a separate thread until the message is reassembled
-  std::thread pump([&ioc] {
-    while (ioc.poll()) {
-    }
-  });
-
-  REQUIRE(done_fut.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
-  tester->socket().close();
+  auto status = done_fut.wait_for(std::chrono::seconds(5));
+  // Always stop and join the pump thread before asserting: a failed REQUIRE with a joinable thread would abort
+  work_guard.reset();
   ioc.stop();
   pump.join();
+  REQUIRE(status == std::future_status::ready);
 
   REQUIRE(parsed.has_value());
   REQUIRE_THAT(parsed->request.cmd, Equals("ANNOUNCE"));
   REQUIRE(parsed->seq_number == 6);
-  // The tail of the body must survive: with the old streambuf handling the first
-  // chunk was duplicated and the last bytes of the payload were dropped
+  // The tail of the body must survive
   REQUIRE(parsed->payloads.size() == 6);
   REQUIRE_THAT(parsed->payloads.back().first, Equals("a"));
   REQUIRE_THAT(parsed->payloads.back().second, Equals("x-nv-video[0].maxFPS:60"));
