@@ -2,9 +2,11 @@ name: Docker build
 
 on:
   push:
-    paths-ignore:
-      - "docs/**"
-      - ".github/**"
+    branches: [stable]
+    tags: ["v*"]
+
+permissions:
+  packages: write
 
 jobs:
   buildx:
@@ -15,7 +17,7 @@ jobs:
 
       # Set derived configuration variables:
       # - images: images to build (docker and/or github)
-      # - push: if images need to be uploaded to repository (when secrets available)
+      # - push: if images need to be uploaded to repository
       # - has_docker_token
       # - has_github_token
       # - cache_from: image tag to use for imported cache
@@ -24,28 +26,16 @@ jobs:
       - name: Prepare
         id: prep
         run: |
-          IMAGES=""
-          PUSH=false
+          REGISTRY_IMAGE="ghcr.io/${{ github.repository_owner }}/wolf"
+          IMAGES="${REGISTRY_IMAGE}"
+          PUSH=true
+          echo "has_github_token=true" >> $GITHUB_OUTPUT
           if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
-            IMAGES="gameonwhales/wolf"
-            PUSH=true
+            IMAGES="gameonwhales/wolf,${IMAGES}"
             echo "has_docker_token=true" >> $GITHUB_OUTPUT
           fi
-          if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
-            REGISTRY_IMAGE="ghcr.io/${{ github.repository_owner }}/wolf"
-            if [ "$IMAGES" = "" ]; then
-              IMAGES="ghcr.io/${REGISTRY_IMAGE}"
-            else
-              IMAGES="$IMAGES,ghcr.io/${REGISTRY_IMAGE}"
-            fi
-            PUSH=true
-            echo "has_github_token=true" >> $GITHUB_OUTPUT
-            echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
-            echo "cache_to=type=registry,ref=${REGISTRY_IMAGE}:buildcache,mode=max" >> $GITHUB_OUTPUT
-          else
-            echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
-            echo "cache_to=" >> $GITHUB_OUTPUT
-          fi
+          echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
+          echo "cache_to=type=registry,ref=${REGISTRY_IMAGE}:buildcache,mode=max" >> $GITHUB_OUTPUT
           echo "images=${IMAGES}" >> $GITHUB_OUTPUT
           echo "push=${PUSH}" >> $GITHUB_OUTPUT
           echo "github_server_url=${GITHUB_SERVER_URL}" >> $GITHUB_OUTPUT
@@ -60,7 +50,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}
-            type=edge,branch=master
+            type=edge,branch=stable
             type=ref,event=branch
             type=raw,value=alpha
             type=sha
@@ -74,20 +64,18 @@ jobs:
           driver-opts: image=moby/buildkit:master
 
       - name: Login to DockerHub
-        if: steps.prep.outputs.has_docker_token != '' # secrets not available in PRs
+        if: steps.prep.outputs.has_docker_token != ''
         uses: docker/login-action@v2
         with:
           username: abeltramo
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-
       - name: Login to GitHub Container Registry
-        if: steps.prep.outputs.has_github_token != '' # secrets not available in PRs
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN || github.token }}
 
       - name: Build GPU Drivers
         uses: docker/build-push-action@v3
@@ -96,7 +84,7 @@ jobs:
           context: docker/
           file: docker/gpu-drivers.Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:2025.05,gameonwhales/gpu-drivers:2025.05 # TODO: set build version as param
+          tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:2025.05 # TODO: set build version as param
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache,mode=max
@@ -111,7 +99,7 @@ jobs:
           build-args: |
             GSTREAMER_VERSION=1.26.7
             BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:2025.05
-          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:1.26.7,gameonwhales/gstreamer:1.26.7 # TODO: set gstreamer version as param
+          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:1.26.7 # TODO: set gstreamer version as param
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache,mode=max
@@ -137,14 +125,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Login to GitHub Container Registry
-        if: steps.prep.outputs.has_github_token != '' # secrets not available in PRs
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Run tests in devcontainer
         uses: devcontainers/ci@v0.3
