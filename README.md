@@ -52,8 +52,8 @@ docker run \
     ghcr.io/ydoc-afk/wolf:stable
 ```
 
-Then point any Moonlight client at your host, pair it (open `http://<host>:47989/pin/` and enter the 4-digit PIN
-shown on the client), and start streaming. Prebuilt guest-app containers (Steam, Pegasus, PrismLauncher, ...) are
+Then point any Moonlight client at your host and pair it: open `http://heeler:47989/pin/` (where `heeler` is
+your server's hostname, the default) and enter the 4-digit PIN shown on the client. Prebuilt guest-app containers (Steam, Pegasus, PrismLauncher, ...) are
 available from [games-on-whales/gow](https://github.com/games-on-whales/gow).
 
 ## Documentation
