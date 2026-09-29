@@ -15,12 +15,12 @@ enum class ControllerType {
 
 struct ClientSettings {
   /* The UID/GID that apps run as defaults to 1000:1000, but the defaults applied
-   * to newly paired clients can be overridden via the WOLF_DEFAULT_RUN_UID /
-   * WOLF_DEFAULT_RUN_GID environment variables. This lets deployments that don't
+   * to newly paired clients can be overridden via the HEALER_DEFAULT_RUN_UID /
+   * HEALER_DEFAULT_RUN_GID environment variables. This lets deployments that don't
    * use the conventional 1000:1000 — for example Unraid, where `nobody` is
    * 99:100 — set sensible defaults without editing each client by hand. */
-  uint run_uid = std::stoul(utils::get_env("WOLF_DEFAULT_RUN_UID", "1000"));
-  uint run_gid = std::stoul(utils::get_env("WOLF_DEFAULT_RUN_GID", "1000"));
+  uint run_uid = std::stoul(utils::get_env("HEALER_DEFAULT_RUN_UID", "1000"));
+  uint run_gid = std::stoul(utils::get_env("HEALER_DEFAULT_RUN_GID", "1000"));
   /* A list of forced controller overrides, the position in the array denotes the controller number */
   std::vector<ControllerType> controllers_override = {};
   /* Values above 1.0 will make it faster, between 0.0 and 1.0 will make it slower */
@@ -31,7 +31,7 @@ struct ClientSettings {
   float h_scroll_acceleration = 1.0;
   /* Motion-capable virtual pad override. When `controllers_override[slot]`
    * is unset, the client advertises GYRO/ACCELEROMETER, AND this is
-   * anything other than `AUTO`, Wolf creates this controller type
+   * anything other than `AUTO`, Heeler creates this controller type
    * instead of the auto-detected one. `AUTO` (default) defers to the
    * auto-detection logic (which promotes UNKNOWN-with-motion clients
    * to PS so motion routes — see `create_new_joypad` in

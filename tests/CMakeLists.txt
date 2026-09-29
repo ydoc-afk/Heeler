@@ -22,7 +22,8 @@ set(SRC_LIST
         testMoonlight.cpp
         testRTSP.cpp
         testWolfAPI.cpp
-        testBatchedSend.cpp)
+        testBatchedSend.cpp
+        testUtils.cpp)
 
 option(TEST_RUST_WAYLAND "Test our custom Rust wayland compositor" ON)
 if (UNIX AND NOT APPLE)
@@ -115,4 +116,4 @@ include(CTest)
 include(Catch)
 catch_discover_tests(wolftests
         PROPERTIES
-        ENVIRONMENT "WOLF_SKIP_WAYLAND_SOCKET_WAIT=TRUE")
+        ENVIRONMENT "HEALER_SKIP_WAYLAND_SOCKET_WAIT=TRUE")
