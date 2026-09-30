@@ -67,6 +67,7 @@ public:
         | ranges::to_vector;                                                                         //
 
     auto docker_socket = utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock");
+    auto docker_config = utils::get_env("HEALER_DOCKER_CONFIG", "");
     return RunDocker(std::move(ev_bus),
                      runner_cfg.base_create_json.value_or(R"({
 "HostConfig": {
@@ -81,7 +82,8 @@ public:
                                .mounts = mounts,
                                .devices = devices,
                                .env = runner_cfg.env},
-                     docker_socket);
+                     docker_socket,
+                     docker_config);
   }
 
   void run(std::string_view session_id,
@@ -110,9 +112,10 @@ protected:
   RunDocker(std::shared_ptr<events::EventBusType> ev_bus,
             std::string base_create_json,
             docker::Container base_container,
-            std::string docker_socket)
+            std::string docker_socket,
+            std::string docker_config = {})
       : ev_bus(std::move(ev_bus)), container(std::move(base_container)), base_create_json(std::move(base_create_json)),
-        docker_api(std::move(docker_socket)) {}
+        docker_api(std::move(docker_socket), std::move(docker_config)) {}
 
 private:
   std::shared_ptr<events::EventBusType> ev_bus;

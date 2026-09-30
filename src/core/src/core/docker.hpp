@@ -79,13 +79,34 @@ std::string with_default_tag(std::string_view image);
  */
 bool is_container_name_conflict_response(long status_code, std::string_view response_body);
 
+/**
+ * The registry an image reference is pulled from, `docker.io` for Docker Hub images
+ * (ex: `ghcr.io/games-on-whales/steam:edge` -> `ghcr.io`, `ubuntu:24.04` -> `docker.io`)
+ */
+std::string registry_from_image(std::string_view image);
+
+/**
+ * Builds the `X-Registry-Auth` header value needed to pull `image`, using the credentials stored in the `auths`
+ * section of a Docker CLI `config.json` (as written by `docker login`).
+ * Returns an empty string when there are no stored credentials for the image registry.
+ *
+ * @see https://docs.docker.com/engine/api/v1.30/#section/Authentication
+ */
+std::string registry_auth_from_config(std::string_view docker_config_json, std::string_view image);
+
 class DockerAPI {
 private:
-  std::string socket_path; // TODO: add B64 registry_auth
+  std::string socket_path;
+  std::string docker_config_path;
   std::string docker_api_version;
 
 public:
-  explicit DockerAPI(std::string socket_path = "/var/run/docker.sock") : socket_path(std::move(socket_path)) {
+  /**
+   * @param docker_config_path: optional, path to a Docker CLI `config.json` used to authenticate image pulls
+   *                            when no explicit registry_auth is passed
+   */
+  explicit DockerAPI(std::string socket_path = "/var/run/docker.sock", std::string docker_config_path = {})
+      : socket_path(std::move(socket_path)), docker_config_path(std::move(docker_config_path)) {
     docker_api_version = get_api_version();
   }
 

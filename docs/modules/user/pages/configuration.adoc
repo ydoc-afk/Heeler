@@ -49,6 +49,10 @@ The `WOLF_*` names are still accepted as deprecated aliases for backwards compat
 |/var/run/docker.sock
 |The full path to the docker socket, doesn't support tcp (yet)
 
+|HEALER_DOCKER_CONFIG
+|_(unset)_
+|Path (inside the Heeler container) to a Docker CLI `config.json` holding registry credentials, e.g. mount `~/.docker/config.json` read-only. When set, Heeler uses the matching `auths` entry to pull app images from private registries. Only inline `auth` and `identitytoken` entries are supported, not `credsStore`/`credHelpers`.
+
 |NVIDIA_DRIVER_VOLUME_NAME
 |nvidia-driver-vol
 |The name of the externally created Docker Volume that holds the Nvidia drivers

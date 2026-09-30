@@ -4,6 +4,7 @@
 #include <curl/curl.h>
 #include <docker/formatters.hpp>
 #include <docker/json_formatters.hpp>
+#include <fstream>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
 #include <range/v3/view.hpp>
@@ -64,6 +65,117 @@ bool is_container_name_conflict_response(long status_code, std::string_view resp
   }
 
   return has_name_conflict_text(response_body);
+}
+
+namespace {
+
+/**
+ * Accepts both the standard and the URL-safe alphabet, stops at the first padding char.
+ * Returns an empty string on invalid input.
+ */
+std::string base64_decode(std::string_view in) {
+  std::string out;
+  int val = 0, valb = -8;
+  for (unsigned char c : in) {
+    int digit;
+    if (c >= 'A' && c <= 'Z') {
+      digit = c - 'A';
+    } else if (c >= 'a' && c <= 'z') {
+      digit = c - 'a' + 26;
+    } else if (c >= '0' && c <= '9') {
+      digit = c - '0' + 52;
+    } else if (c == '+' || c == '-') {
+      digit = 62;
+    } else if (c == '/' || c == '_') {
+      digit = 63;
+    } else if (c == '=') {
+      break;
+    } else {
+      return {};
+    }
+    val = ((val << 6) | digit) & 0xFFFF;
+    valb += 6;
+    if (valb >= 0) {
+      out.push_back(static_cast<char>((val >> valb) & 0xFF));
+      valb -= 8;
+    }
+  }
+  return out;
+}
+
+/**
+ * Docker CLI config keys can be a bare host (`ghcr.io`) or a URL (`https://index.docker.io/v1/`)
+ */
+std::string normalize_registry(std::string_view registry) {
+  if (auto scheme = registry.find("://"); scheme != std::string_view::npos) {
+    registry.remove_prefix(scheme + 3);
+  }
+  if (auto path = registry.find('/'); path != std::string_view::npos) {
+    registry = registry.substr(0, path);
+  }
+  auto normalized = lower_copy(registry);
+  if (normalized == "index.docker.io" || normalized == "registry-1.docker.io") {
+    return "docker.io";
+  }
+  return normalized;
+}
+
+} // namespace
+
+std::string registry_from_image(std::string_view image) {
+  if (auto slash = image.find('/'); slash != std::string_view::npos) {
+    auto first = image.substr(0, slash);
+    if (first.find('.') != std::string_view::npos || first.find(':') != std::string_view::npos ||
+        first == "localhost") {
+      return normalize_registry(first);
+    }
+  }
+  return "docker.io";
+}
+
+std::string registry_auth_from_config(std::string_view docker_config_json, std::string_view image) {
+  boost::system::error_code ec;
+  auto config = json::parse(docker_config_json, ec);
+  if (ec || !config.is_object()) {
+    logs::log(logs::warning, "[DOCKER] Unable to parse the docker config file");
+    return {};
+  }
+  auto auths = config.as_object().if_contains("auths");
+  if (!auths || !auths->is_object()) {
+    return {};
+  }
+
+  auto registry = registry_from_image(image);
+  for (const auto &entry : auths->as_object()) {
+    std::string_view server_address(entry.key().data(), entry.key().size());
+    if (normalize_registry(server_address) != registry || !entry.value().is_object()) {
+      continue;
+    }
+    const auto &credentials = entry.value().as_object();
+    auto auth_config = json::object();
+    auth_config["serveraddress"] = std::string(server_address);
+    if (auto token = credentials.if_contains("identitytoken"); token && token->is_string()) {
+      auth_config["identitytoken"] = token->as_string();
+    } else if (auto auth = credentials.if_contains("auth"); auth && auth->is_string()) {
+      auto user_password = base64_decode(auth->as_string());
+      auto separator = user_password.find(':');
+      if (separator == std::string::npos) {
+        logs::log(logs::warning, "[DOCKER] Invalid credentials for registry {} in docker config", server_address);
+        return {};
+      }
+      auth_config["username"] = user_password.substr(0, separator);
+      auth_config["password"] = user_password.substr(separator + 1);
+    } else {
+      continue;
+    }
+
+    // The Docker API expects base64url
+    auto encoded = utils::base64_encode(json::serialize(auth_config));
+    std::replace(encoded.begin(), encoded.end(), '+', '-');
+    std::replace(encoded.begin(), encoded.end(), '/', '_');
+    return encoded;
+  }
+  return {};
 }
 
 std::optional<std::string> parse_pull_error(std::string_view progress_line) {
@@ -356,6 +468,17 @@ bool DockerAPI::pull_image(std::string_view image_name, std::string_view registr
 bool DockerAPI::pull_image(std::string_view image_name,
                            std::string_view registry_auth,
                            const std::function<void(const DockerProgressEvent &)> &progress_fn) const {
+  std::string config_auth;
+  if (registry_auth.empty() && !docker_config_path.empty()) {
+    if (std::ifstream config_file(docker_config_path); config_file) {
+      std::string config_json{std::istreambuf_iterator<char>(config_file), std::istreambuf_iterator<char>()};
+      config_auth = registry_auth_from_config(config_json, image_name);
+      registry_auth = config_auth;
+    } else {
+      logs::log(logs::warning, "[DOCKER] Unable to read docker config file {}", docker_config_path);
+    }
+  }
+
   if (auto conn = docker_connect(socket_path)) {
     auto api_url =
         fmt::format("http://localhost/{}/images/create?fromImage={}", docker_api_version, with_default_tag(image_name));

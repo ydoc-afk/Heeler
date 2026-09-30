@@ -672,7 +672,8 @@ void UnixSocketServer::endpoint_DockerPullImage(const HTTPRequest &req, std::sha
   if (input_payload) {
     // TODO: implement coroutines for CURL
     std::thread([this, socket, image = input_payload.value().image_name]() {
-      docker::DockerAPI docker_api(utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock"));
+      docker::DockerAPI docker_api(utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock"),
+                                   utils::get_env("HEALER_DOCKER_CONFIG", ""));
       bool first_send = true;
       broadcast_event("DockerPullImageStartEvent",
                       rfl::json::write(events::DockerPullImageStartEvent{.image_name = image}));
