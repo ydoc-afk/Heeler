@@ -20,6 +20,7 @@ using Catch::Matchers::Equals;
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
 #include <rest/pairing_key.hpp>
+#include <sessions/handlers.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
 
@@ -736,4 +737,35 @@ TEST_CASE("Pairing key", "[PAIRING]") {
     REQUIRE(second == Result::WRONG_KEY);
     REQUIRE(after_second.find("10.0.0.2")->failures == 1);
   }
+}
+
+TEST_CASE("Stream is stopped when the client never sends the RTP ping", "[MoonlightProtocol]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = state::load_or_default("config.test.toml", event_bus, running_sessions);
+  auto app_state = immer::box<state::AppState>(state::AppState{.config = {config},
+                                                               .event_bus = event_bus,
+                                                               .running_sessions = running_sessions});
+  auto handlers = wolf::core::sessions::setup_moonlight_handlers(app_state, "/tmp", std::nullopt);
+
+  auto stopped = std::make_shared<std::promise<std::size_t>>();
+  auto stopped_fut = stopped->get_future();
+  auto once = std::make_shared<std::atomic_bool>(false);
+  auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
+      [stopped, once](const immer::box<events::StopStreamEvent> &ev) {
+        if (!once->exchange(true)) {
+          stopped->set_value(ev->session_id);
+        }
+      });
+
+  // A video session whose client never pings: without a bound on the wait this thread would live forever
+  events::VideoSession video_session{};
+  video_session.session_id = 4242;
+  video_session.timeout_ms = 200;
+  event_bus->fire_event(immer::box<events::VideoSession>(video_session));
+
+  REQUIRE(stopped_fut.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+  REQUIRE(stopped_fut.get() == 4242);
+
+  stop_handler.unregister();
 }
