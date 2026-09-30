@@ -35,6 +35,15 @@ struct GenericErrorResponse {
   std::string error;
 };
 
+struct HealthResponse {
+  bool success = true;
+  rfl::Description<"Seconds since the API server started", long> uptime_seconds;
+  rfl::Description<"Number of paired Moonlight clients", std::size_t> paired_clients;
+  rfl::Description<"Number of Moonlight clients waiting to be paired", std::size_t> pending_pair_requests;
+  rfl::Description<"Number of active streaming sessions", std::size_t> running_sessions;
+  rfl::Description<"Number of active lobbies", std::size_t> lobbies;
+};
+
 struct PendingPairRequestsResponse {
   bool success = true;
   std::vector<PendingPairClient> requests;
@@ -192,6 +201,7 @@ public:
 
 private:
   void endpoint_Events(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_Health(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
   void endpoint_PendingPairRequest(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_Pair(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
@@ -247,7 +257,8 @@ private:
     UnixSocketState(boost::asio::io_context &io_context, immer::box<state::AppState> app_state, std::string socket_path)
         : io_context(io_context), app_state(app_state),
           acceptor(io_context, boost::asio::local::stream_protocol::endpoint(socket_path)),
-          http(HTTPServer<std::shared_ptr<UnixSocket>>{}), sse_keepalive_timer(boost::asio::steady_timer{io_context}) {}
+          http(HTTPServer<std::shared_ptr<UnixSocket>>{}), sse_keepalive_timer(boost::asio::steady_timer{io_context}),
+          started_at(std::chrono::steady_clock::now()) {}
 
     boost::asio::io_context &io_context;
     immer::box<state::AppState> app_state;
@@ -255,6 +266,7 @@ private:
     std::vector<std::shared_ptr<UnixSocket>> sockets;
     HTTPServer<std::shared_ptr<UnixSocket>> http;
     boost::asio::steady_timer sse_keepalive_timer;
+    std::chrono::steady_clock::time_point started_at;
   };
 
   std::shared_ptr<UnixSocketState> state_;

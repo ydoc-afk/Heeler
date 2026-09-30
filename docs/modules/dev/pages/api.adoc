@@ -14,6 +14,16 @@ curl --unix-socket /var/run/wolf/wolf.sock http://localhost/api/v1/openapi-schem
 
 When looking at the examples in the xref:api_reference[] remember to add the `--unix-socket` flag to the `curl` command.
 
+== Health check
+
+`GET /api/v1/health` returns `200` while Heeler is running, together with a few activity counters. It's cheap to call (it only reads in-memory state), so it's suitable for monitoring or uptime probes:
+
+[source,bash]
+....
+curl --unix-socket /var/run/wolf/wolf.sock http://localhost/api/v1/health
+# {"success":true,"uptime_seconds":3600,"paired_clients":2,"pending_pair_requests":0,"running_sessions":1,"lobbies":0}
+....
+
 == Exposing the API via TCP
 
 [WARNING]

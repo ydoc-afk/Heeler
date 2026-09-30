@@ -17,6 +17,19 @@ void UnixSocketServer::endpoint_Events(const HTTPRequest &req, std::shared_ptr<U
             ""); // Inform clients this is going to be SS
 }
 
+void UnixSocketServer::endpoint_Health(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  const auto &app_state = state_->app_state;
+  auto uptime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - state_->started_at);
+  auto res = HealthResponse{
+      .uptime_seconds = static_cast<long>(uptime.count()),
+      .paired_clients = app_state->config->paired_clients ? app_state->config->paired_clients->load()->size() : 0,
+      .pending_pair_requests = app_state->pairing_atom ? app_state->pairing_atom->load()->size() : 0,
+      .running_sessions = app_state->running_sessions ? app_state->running_sessions->load()->size() : 0,
+      .lobbies = app_state->lobbies ? app_state->lobbies->load()->size() : 0,
+  };
+  send_http(socket, 200, rfl::json::write(res));
+}
+
 void UnixSocketServer::endpoint_PendingPairRequest(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto requests = std::vector<PendingPairClient>();
   for (auto [secret, pair_request] : *(state_->app_state)->pairing_atom->load()) {
