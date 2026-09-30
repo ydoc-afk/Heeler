@@ -67,7 +67,7 @@ R"for_c++_include(
             justify-content: center;
         }
 
-        input {
+        form input {
             margin: 0 0.5rem;
             padding: 0.5rem;
             border: 1px solid white;
@@ -79,18 +79,116 @@ R"for_c++_include(
             color: white;
             background: transparent;
         }
+
+        .key {
+            gap: 0.5rem;
+        }
+
+        .key input {
+            width: 14rem;
+            height: auto;
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .key button {
+            padding: 0.5rem 1rem;
+            border: 1px solid white;
+            border-radius: 0.25rem;
+            color: rgb(63, 0, 195);
+            background: white;
+            font-size: 1rem;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
 
 <div id="content">
-    <h1>Wolf pairing</h1>
+    <h1>Heeler pairing</h1>
 </div>
 
 <script type="application/javascript">
     const content = document.getElementById("content");
     const deepLinkSecret = window.location.hash.substring(1);
     const POLL_MS = 2500;
+    const KEY_STORAGE = "heeler-pairing-key";
+
+    function loadKey() {
+        try {
+            return localStorage.getItem(KEY_STORAGE) || "";
+        } catch (e) {
+            return "";
+        }
+    }
+
+    function saveKey(key) {
+        try {
+            if (key) {
+                localStorage.setItem(KEY_STORAGE, key);
+            } else {
+                localStorage.removeItem(KEY_STORAGE);
+            }
+        } catch (e) {
+        }
+    }
+
+    let pairingKey = loadKey();
+    let pollTimer = null;
+
+    function startPolling() {
+        if (pollTimer) return;
+        poll();
+        pollTimer = setInterval(poll, POLL_MS);
+    }
+
+    // A rejected key must stop the polling, otherwise we would lock ourselves out
+    function stopPolling() {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+
+    function setHint(text) {
+        let hint = content.querySelector(".hint");
+        if (!text) {
+            if (hint) hint.remove();
+            return;
+        }
+        if (!hint) {
+            hint = document.createElement("p");
+            hint.className = "hint";
+            content.appendChild(hint);
+        }
+        hint.textContent = text;
+    }
+
+    function showKeyForm(message) {
+        stopPolling();
+        setHint(message);
+        if (content.querySelector(".key")) return;
+        const form = document.createElement("form");
+        form.className = "key";
+        const input = document.createElement("input");
+        input.type = "password";
+        input.placeholder = "Pairing key";
+        input.autocomplete = "current-password";
+        const button = document.createElement("button");
+        button.type = "submit";
+        button.textContent = "Unlock";
+        form.appendChild(input);
+        form.appendChild(button);
+        form.addEventListener("submit", (ev) => {
+            ev.preventDefault();
+            if (!input.value) return;
+            pairingKey = input.value;
+            saveKey(pairingKey);
+            form.remove();
+            setHint("");
+            startPolling();
+        });
+        content.appendChild(form);
+        input.focus();
+    }
 
     // secret -> card, so polling never re-renders a card the user is currently typing in
     const cards = new Map();
@@ -176,8 +274,32 @@ R"for_c++_include(
     function poll() {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", "/pin/pending", true);
+        if (pairingKey) {
+            xhr.setRequestHeader("X-Pairing-Key", pairingKey);
+        }
         xhr.onreadystatechange = function () {
-            if (xhr.readyState !== 4 || xhr.status !== 200) return;
+            if (xhr.readyState !== 4) return;
+            if (xhr.status === 401) {
+                const hadKey = !!pairingKey;
+                pairingKey = "";
+                saveKey("");
+                showKeyForm(hadKey ? "Wrong pairing key, try again." :
+                    "Enter the pairing key (HEALER_PAIRING_KEY) to see the devices waiting to pair.");
+                return;
+            }
+            if (xhr.status === 429) {
+                pairingKey = "";
+                saveKey("");
+                showKeyForm("Too many wrong keys, wait a minute and try again.");
+                return;
+            }
+            if (xhr.status === 403) {
+                stopPolling();
+                setHint("The device list is disabled on this server: set HEALER_PAIRING_KEY to enable it, " +
+                    "or open the link printed in the server log.");
+                return;
+            }
+            if (xhr.status !== 200) return;
             let data;
             try {
                 data = JSON.parse(xhr.responseText);
@@ -203,17 +325,7 @@ R"for_c++_include(
             }
 
             // Waiting hint only while nothing is pending
-            let hint = content.querySelector(".hint");
-            if (pending.length === 0) {
-                if (!hint) {
-                    hint = document.createElement("p");
-                    hint.className = "hint";
-                    hint.textContent = "Waiting for a device to request pairing...";
-                    content.appendChild(hint);
-                }
-            } else if (hint) {
-                hint.remove();
-            }
+            setHint(pending.length === 0 ? "Waiting for a device to request pairing..." : "");
         };
         xhr.send();
     }
@@ -222,8 +334,7 @@ R"for_c++_include(
         // Legacy deep link: /pin/#<secret> (e.g. copied from the server log)
         content.appendChild(createCard(deepLinkSecret, "Enter the PIN shown on the device"));
     } else {
-        poll();
-        setInterval(poll, POLL_MS);
+        startPolling();
     }
 </script>
 </body>
