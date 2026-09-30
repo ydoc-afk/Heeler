@@ -12,16 +12,21 @@ set(BOOST_COMPONENTS
 )
 find_package(Boost ${BOOST_VERSION} COMPONENTS ${BOOST_COMPONENTS} QUIET)
 if (NOT Boost_FOUND)
-    # Building Boost from source (FetchContent) isn't supported: some dependencies (immer, Simple-Web-Server) run
-    # their own find_package(Boost), which can't find a Boost that is only built, not installed.
-    list(JOIN BOOST_COMPONENTS ", " BOOST_COMPONENTS_LIST)
-    message(FATAL_ERROR
-            "Boost >= ${BOOST_VERSION} (components: ${BOOST_COMPONENTS_LIST}) was not found.\n"
-            "Install the Boost development packages, for example:\n"
-            "  Debian/Ubuntu: apt install libboost-thread-dev libboost-locale-dev libboost-filesystem-dev "
-            "libboost-log-dev libboost-stacktrace-dev libboost-container-dev libboost-json-dev\n"
-            "  Arch: pacman -S boost\n"
-            "  Fedora: dnf install boost-devel\n"
-            "or point CMake at an existing installation with -DBoost_ROOT=<prefix>.")
+    message(STATUS "Boost (or some required components) not found, falling back to FetchContent instead")
+
+    set(BOOST_INCLUDE_LIBRARIES ${BOOST_COMPONENTS})
+    set(BOOST_ENABLE_CMAKE ON)
+    FetchContent_Declare(
+            Boost
+            URL "https://github.com/boostorg/boost/releases/download/boost-${BOOST_VERSION}/boost-${BOOST_VERSION}-cmake.tar.xz"
+    )
+    FetchContent_MakeAvailable(Boost)
+
+    set(Boost_FOUND TRUE)
+    set(Boost_INCLUDE_DIRS "$<BUILD_INTERFACE:${Boost_SOURCE_DIR}/libs/headers/include>")
+    set(Boost_LIBRARIES "")  # cmake-lint: disable=C0103
+    foreach (component ${BOOST_COMPONENTS})
+        list(APPEND Boost_LIBRARIES "Boost::${component}")
+    endforeach ()
 endif ()
 include_directories(${Boost_INCLUDE_DIRS})
