@@ -132,7 +132,8 @@ std::optional<sessions::AudioServer> setup_audio_server(const std::string &host_
     return {{.server = audio_server}};
   } else {
     logs::log(logs::info, "Starting PulseAudio docker container");
-    docker::DockerAPI docker_api(utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock"));
+    docker::DockerAPI docker_api(utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock"),
+                                 utils::get_env("HEALER_DOCKER_CONFIG", ""));
     auto pulse_socket = fmt::format("{}/pulse-socket", runtime_dir);
 
     /* Cleanup old leftovers, Pulse will fail to start otherwise */
