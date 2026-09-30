@@ -1,5 +1,6 @@
 #include "state/sessions.hpp"
 
+#include <algorithm>
 #include <boost/endian/conversion.hpp>
 #include <boost/locale.hpp>
 #include <control/input_handler.hpp>
@@ -473,7 +474,14 @@ void utf8_text(const UTF8_TEXT_PACKET &pkt, events::StreamSession &session) {
      * - then type: CTRL+SHIFT+U+1F4A9
      * see the conversion at: https://www.compart.com/en/unicode/U+1F4A9
      */
-    auto size = boost::endian::big_to_native(pkt.data_size) - sizeof(pkt.packet_type) - 2;
+    auto data_size = boost::endian::big_to_native(pkt.data_size);
+    // data_size covers the whole INPUT_PKT header + text; reject packets that are too
+    // small (the subtraction below would underflow) and cap the read at the text buffer
+    if (data_size < sizeof(pkt.packet_type) + 2) {
+      logs::log(logs::warning, "Received malformed UTF8_TEXT_PACKET (data_size={}), ignoring", data_size);
+      return;
+    }
+    auto size = std::min<std::size_t>(data_size - sizeof(pkt.packet_type) - 2, UTF8_TEXT_MAX_LEN);
     /* Reading input text as UTF-8 */
     auto utf8 = boost::locale::conv::to_utf<wchar_t>(pkt.text, pkt.text + size, "UTF-8");
     /* Converting to UTF-32 */
