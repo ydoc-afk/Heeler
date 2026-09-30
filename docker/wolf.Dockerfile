@@ -21,6 +21,7 @@ RUN apt-get update -y && \
     libssl-dev \
     libevdev-dev \
     libpulse-dev \
+    libopus-dev \
     libunwind-dev \
     libudev-dev \
     libdrm-dev \

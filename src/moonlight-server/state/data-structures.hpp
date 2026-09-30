@@ -244,6 +244,42 @@ const static immer::array<audio::AudioMode> AUDIO_CONFIGURATIONS = {
                    audio::AudioMode::Speakers::SIDE_RIGHT},
       .bitrate = 450000}}};
 
+/**
+ * Moonlight's high quality surround mode: one uncoupled stream per channel, in the channel order the client plays
+ * (FL FR C LFE RL RR SL SR, which is also GStreamer's order), at a much higher bitrate.
+ * Moonlight only asks for these (x-nv-audio.surround.AudioQuality=1) when we advertise them in DESCRIBE,
+ * they're encoded with moonlightopusenc since opusenc can't produce this layout.
+ */
+const static immer::array<audio::AudioMode> HIGH_QUALITY_AUDIO_CONFIGURATIONS = {
+    {// 5.1
+     {.channels = 6,
+      .streams = 6,
+      .coupled_streams = 0,
+      .speakers = {audio::AudioMode::Speakers::FRONT_LEFT,
+                   audio::AudioMode::Speakers::FRONT_RIGHT,
+                   audio::AudioMode::Speakers::FRONT_CENTER,
+                   audio::AudioMode::Speakers::LOW_FREQUENCY,
+                   audio::AudioMode::Speakers::BACK_LEFT,
+                   audio::AudioMode::Speakers::BACK_RIGHT},
+      .bitrate = 1536000},
+     // 7.1
+     {.channels = 8,
+      .streams = 8,
+      .coupled_streams = 0,
+      .speakers = {audio::AudioMode::Speakers::FRONT_LEFT,
+                   audio::AudioMode::Speakers::FRONT_RIGHT,
+                   audio::AudioMode::Speakers::FRONT_CENTER,
+                   audio::AudioMode::Speakers::LOW_FREQUENCY,
+                   audio::AudioMode::Speakers::BACK_LEFT,
+                   audio::AudioMode::Speakers::BACK_RIGHT,
+                   audio::AudioMode::Speakers::SIDE_LEFT,
+                   audio::AudioMode::Speakers::SIDE_RIGHT},
+      .bitrate = 2048000}}};
+
+inline bool is_high_quality(const audio::AudioMode &mode) {
+  return mode.channels > 2 && mode.coupled_streams == 0;
+}
+
 static const audio::AudioMode &get_audio_mode(int channels, bool high_quality) {
   int base_index = 0;
   if (channels == 6) {
@@ -254,8 +290,11 @@ static const audio::AudioMode &get_audio_mode(int channels, bool high_quality) {
     logs::log(logs::warning, "Moonlight requested an impossible number of channels: {}", channels);
   }
 
-  return AUDIO_CONFIGURATIONS[base_index]; // TODO: add high quality settings, it sounds bad if we can't change the
-                                           //       opusenc settings too..
+  // Moonlight only uses high quality mode for surround sound
+  if (high_quality && base_index > 0) {
+    return HIGH_QUALITY_AUDIO_CONFIGURATIONS[base_index - 1];
+  }
+  return AUDIO_CONFIGURATIONS[base_index];
 }
 
 /**

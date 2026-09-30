@@ -10,6 +10,8 @@
 #include <immer/array.hpp>
 #include <immer/box.hpp>
 #include <memory>
+#include <regex>
+#include <state/data-structures.hpp>
 #include <streaming/streaming.hpp>
 #include <thread>
 
@@ -539,6 +541,24 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
 /**
  * Start AUDIO pipeline
  */
+std::string
+use_high_quality_opus_encoder(const std::string &pipeline, const audio::AudioMode &audio_mode, int packet_duration) {
+  // opusenc can't do one uncoupled stream per channel: swap it (and its settings) for moonlightopusenc
+  static const std::regex opusenc(R"(opusenc\b[^!]*)");
+  auto encoder = fmt::format("moonlightopusenc bitrate={} frame-size={} streams={} coupled-streams={} ",
+                             audio_mode.bitrate,
+                             packet_duration,
+                             audio_mode.streams,
+                             audio_mode.coupled_streams);
+  if (!std::regex_search(pipeline, opusenc)) {
+    logs::log(logs::warning,
+              "[GSTREAMER] High quality audio requested but the audio pipeline has no opusenc to replace, "
+              "the client won't be able to decode it");
+    return pipeline;
+  }
+  return std::regex_replace(pipeline, opusenc, encoder, std::regex_constants::format_first_only);
+}
+
 void start_streaming_audio(immer::box<events::AudioSession> audio_session,
                            const std::shared_ptr<events::EventBusType> &event_bus,
                            std::string client_ip,
@@ -564,6 +584,9 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
       fmt::arg("client_port", client_port),
       fmt::arg("client_ip", client_ip),
       fmt::arg("host_port", audio_session->port));
+  if (state::is_high_quality(audio_session->audio_mode)) {
+    pipeline = use_high_quality_opus_encoder(pipeline, audio_session->audio_mode, audio_session->packet_duration);
+  }
   logs::log(logs::debug, "Starting audio pipeline: \n{}", pipeline);
 
   std::shared_ptr<custom_sink::UDPSink> udp_sink = std::make_shared<custom_sink::UDPSink>(custom_sink::UDPSink{

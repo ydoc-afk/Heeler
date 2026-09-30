@@ -145,6 +145,10 @@ file(GLOB SRC_LIST SRCS
         streaming/*.cpp
         introspect/*.cpp)
 
+# moonlightopusenc (gst-plugin/) is a GstAudioEncoder built on libopus
+pkg_check_modules(GST_AUDIO_OPUS REQUIRED IMPORTED_TARGET gstreamer-audio-1.0 opus)
+target_link_libraries(wolf_runner PUBLIC PkgConfig::GST_AUDIO_OPUS)
+
 if (UNIX AND NOT APPLE)
     message(STATUS "Adding input implementation for LINUX")
 

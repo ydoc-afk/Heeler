@@ -131,6 +131,22 @@ describe(const RTSP_PACKET &req, const events::StreamSession &session) {
     logs::log(logs::trace, "[RTSP] Sending audio surround params: {}", surround_params);
   }
 
+  // Moonlight parses a second surround-params line for the same channel count as the high quality layout
+  // (used verbatim, no GFE channel rotation), and only then allows high quality surround audio
+  for (const auto &audio_mode : state::HIGH_QUALITY_AUDIO_CONFIGURATIONS) {
+    std::string mapping;
+    for (int i = 0; i < audio_mode.channels; i++) {
+      mapping += static_cast<char>('0' + i); // identity: channel i is stream i
+    }
+    auto surround_params = fmt::format("fmtp:97 surround-params={}{}{}{}",
+                                       audio_mode.channels,
+                                       audio_mode.streams,
+                                       audio_mode.coupled_streams,
+                                       mapping);
+    payloads.push_back({"a", surround_params});
+    logs::log(logs::trace, "[RTSP] Sending high quality audio surround params: {}", surround_params);
+  }
+
   payloads.push_back(
       {"a", fmt::format("x-ss-general.featureFlags: {}", FS_PEN_TOUCH_EVENTS | FS_CONTROLLER_TOUCH_EVENTS)});
 
