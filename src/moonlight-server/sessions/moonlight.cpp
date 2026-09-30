@@ -1,9 +1,9 @@
 #include <atomic>
 #include <chrono>
 #include <immer/array_transient.hpp>
-#include <optional>
 #include <immer/map_transient.hpp>
 #include <immer/vector_transient.hpp>
+#include <optional>
 #include <sessions/common.hpp>
 #include <sessions/handlers.hpp>
 #include <state/sessions.hpp>
@@ -22,9 +22,7 @@ using session_devices = immer::map<std::string /* session_id */, std::shared_ptr
  */
 template <typename RTPPingType>
 std::optional<immer::box<RTPPingType>>
-wait_for_ping(std::shared_ptr<events::EventBusType> ev_bus,
-              const auto &sess,
-              std::chrono::milliseconds timeout) {
+wait_for_ping(std::shared_ptr<events::EventBusType> ev_bus, const auto &sess, std::chrono::milliseconds timeout) {
   auto ping_promise = std::make_shared<std::promise<RTPPingType>>();
   auto ping_future = ping_promise->get_future();
   auto resolved = std::make_shared<std::atomic_bool>(false);
@@ -260,8 +258,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
        gst_context = app_state->gst_context](const immer::box<events::VideoSession> &sess) {
         // Start a thread that will wait for the RTP ping event
         std::thread([sess, ev_bus, gst_context]() {
-          auto timeout = std::chrono::milliseconds(
-              sess->timeout_ms > 0 ? sess->timeout_ms : DEFAULT_PING_TIMEOUT_MS);
+          auto timeout = std::chrono::milliseconds(sess->timeout_ms > 0 ? sess->timeout_ms : DEFAULT_PING_TIMEOUT_MS);
           auto ping_ev = wait_for_ping<events::RTPVideoPingEvent>(ev_bus, sess, timeout);
           if (!ping_ev)
             return;
@@ -280,9 +277,9 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
       [ev_bus = app_state->event_bus, audio_server](const immer::box<events::AudioSession> &sess) {
         // Start a thread that will wait for the RTP ping event
         std::thread([sess, ev_bus, audio_server]() {
-          auto ping_ev =
-              wait_for_ping<events::RTPAudioPingEvent>(ev_bus, sess,
-                                                       std::chrono::milliseconds(DEFAULT_PING_TIMEOUT_MS));
+          auto ping_ev = wait_for_ping<events::RTPAudioPingEvent>(ev_bus,
+                                                                  sess,
+                                                                  std::chrono::milliseconds(DEFAULT_PING_TIMEOUT_MS));
           if (!ping_ev)
             return;
 
