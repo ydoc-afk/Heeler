@@ -461,6 +461,14 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                            "{}"
                            "\n\n\n\n",
                            video_params);
+    // tcp_tester re-serialises the request: every payload line is sent with a \r\n ending and the trailing
+    // blank lines are dropped, so Content-length has to match that and not the raw sdp string
+    std::size_t sent_payload_size = 0;
+    for (auto line : utils::split(sdp, '\n')) {
+      if (!line.empty()) {
+        sent_payload_size += line.size() + 2;
+      }
+    }
     wolf_client->run(fmt::format("ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
                                  "CSeq: {}\n"
                                  "X-GS-ClientVersion: 14\n"
@@ -471,7 +479,7 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                                  "\n"
                                  "{}",
                                  cseq,
-                                 sdp.size(),
+                                 sent_payload_size,
                                  sdp),
                      [cseq](std::optional<RTSP_PACKET> response) {
                        REQUIRE(response.has_value());
