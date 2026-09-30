@@ -3,7 +3,10 @@
 
 using Catch::Matchers::Equals;
 
+#include <boost/asio.hpp>
+#include <control/control.hpp>
 #include <control/input_handler.hpp>
+#include <future>
 #include <moonlight/control.hpp>
 using namespace moonlight::control;
 
@@ -122,4 +125,23 @@ TEST_CASE("Sanitize untrusted input packets", "[CONTROL]") {
     REQUIRE(!with_data_size(header_size + 4, 1));                         // claims more than was sent
     REQUIRE(!with_data_size(header_size + UTF8_TEXT_MAX_LEN + 1, UTF8_TEXT_MAX_LEN)); // bigger than the text buffer
   }
+}
+
+TEST_CASE("control server fails cleanly when the port is unavailable", "[CONTROL]") {
+  using namespace std::chrono_literals;
+  REQUIRE(control::init());
+
+  // Occupy the UDP port so that enet_host_create() fails
+  boost::asio::io_context ioc;
+  boost::asio::ip::udp::socket blocker(ioc,
+                                       boost::asio::ip::udp::endpoint(boost::asio::ip::make_address("127.0.0.1"), 0));
+  int port = blocker.local_endpoint().port();
+
+  auto sessions = std::make_shared<immer::atom<immer::vector<wolf::core::events::StreamSession>>>();
+  auto event_bus = std::make_shared<wolf::core::events::EventBusType>();
+
+  // It used to carry on with a null host (crashing in the ENet loop); now it must just return
+  auto done =
+      std::async(std::launch::async, [&] { control::run_control(port, sessions, event_bus, 20, 100ms, "127.0.0.1"); });
+  REQUIRE(done.wait_for(5s) == std::future_status::ready);
 }

@@ -10,7 +10,11 @@ namespace wolf::api {
 
 void UnixSocketServer::endpoint_Events(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   // curl -N --unix-socket /tmp/wolf.sock http://localhost/api/v1/events
-  state_->sockets.push_back(socket);
+  {
+    // Runs on the request thread pool while the io thread iterates/erases the vector
+    std::lock_guard lock(state_->sockets_mutex);
+    state_->sockets.push_back(socket);
+  }
   send_http(socket,
             200,
             {{"Content-Type: text/event-stream"}, {"Connection: keep-alive"}, {"Cache-Control: no-cache"}},

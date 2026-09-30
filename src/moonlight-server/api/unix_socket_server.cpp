@@ -346,7 +346,14 @@ void UnixSocketServer::sse_keepalive(const boost::system::error_code &e) {
 }
 
 void UnixSocketServer::sse_broadcast(const std::string &payload) {
-  for (auto &socket : state_->sockets) {
+  // Snapshot under the lock: sockets are pushed to from the request thread pool
+  // (endpoint_Events) while this runs on the io/event threads
+  std::vector<std::shared_ptr<UnixSocket>> sockets;
+  {
+    std::lock_guard lock(state_->sockets_mutex);
+    sockets = state_->sockets;
+  }
+  for (auto &socket : sockets) {
     boost::asio::async_write(socket->socket,
                              boost::asio::buffer(payload),
                              [this, socket](const boost::system::error_code &ec, std::size_t /*length*/) {
@@ -364,6 +371,7 @@ void UnixSocketServer::broadcast_event(const std::string &event_type, const std:
 }
 
 void UnixSocketServer::cleanup_sockets() {
+  std::lock_guard lock(state_->sockets_mutex);
   state_->sockets.erase(std::remove_if(state_->sockets.begin(),
                                        state_->sockets.end(),
                                        [](const auto &socket) { return !socket->is_alive; }),
@@ -378,7 +386,22 @@ void UnixSocketServer::send_http(std::shared_ptr<UnixSocket> socket,
                                  int status_code,
                                  const std::vector<std::string_view> &http_headers,
                                  std::string_view body) {
-  auto http_reply = fmt::format("HTTP/1.0 {} OK\r\n{}\r\n\r\n{}", status_code, fmt::join(http_headers, "\r\n"), body);
+  auto status_text = [status_code]() -> std::string_view {
+    switch (status_code) {
+    case 200:
+      return "OK";
+    case 400:
+      return "Bad Request";
+    case 404:
+      return "Not Found";
+    case 413:
+      return "Payload Too Large";
+    default:
+      return status_code >= 500 ? "Internal Server Error" : "OK";
+    }
+  }();
+  auto http_reply =
+      fmt::format("HTTP/1.0 {} {}\r\n{}\r\n\r\n{}", status_code, status_text, fmt::join(http_headers, "\r\n"), body);
   send_data(socket, http_reply);
 }
 
@@ -438,7 +461,16 @@ void UnixSocketServer::start_connection(std::shared_ptr<UnixSocket> socket) {
 
         // Get the body payload
         if (req.headers.contains("Content-Length")) {
-          auto content_length = std::stoul(req.headers.find("Content-Length")->second);
+          auto content_length_str = req.headers.find("Content-Length")->second;
+          std::size_t content_length = 0;
+          try {
+            content_length = std::stoul(content_length_str);
+          } catch (const std::exception &) {
+            logs::log(logs::warning, "[API] Malformed Content-Length header: '{}'", content_length_str);
+            send_http(socket, 400, "Malformed Content-Length header");
+            close(*socket);
+            return;
+          }
           std::size_t num_additional_bytes = request_buf->size() - bytes_transferred;
           if (content_length > request_buf->max_size()) {
             send_http(socket, 413, "Payload Too Large");
@@ -487,7 +519,11 @@ void UnixSocketServer::start_accept() {
 }
 
 void UnixSocketServer::close(UnixSocket &socket) {
-  socket.socket.close();
+  // Non-throwing: the socket may already be closed (e.g. two failed writes racing
+  // to close it), and a throw out of an async completion would take the server down
+  boost::system::error_code ec;
+  socket.socket.shutdown(boost::asio::local::stream_protocol::socket::shutdown_both, ec);
+  socket.socket.close(ec);
   socket.is_alive = false;
 }
 } // namespace wolf::api

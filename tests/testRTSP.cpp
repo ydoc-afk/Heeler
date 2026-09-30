@@ -1,10 +1,12 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 using Catch::Matchers::Equals;
 
 #include <boost/beast/_experimental/test/stream.hpp>
 #include <crypto/crypto.hpp>
+#include <future>
 #include <rtsp/net.hpp>
 #include <rtsp/parser.hpp>
 #include <state/data-structures.hpp>
@@ -382,7 +384,7 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                      "Host: 00.11.22.33.44\n"
                      "Session:  DEADBEEFCAFE\n"
                      "Content-type: application/sdp\n"
-                     "Content-length: 1308"
+                     "Content-length: 1307"
                      "\r\n\r\n" // start of payload
                      "v=0\n"
                      "o=android 0 14 IN IPv4 0.0.0.0\n"
@@ -450,6 +452,58 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 7);
                      });
+  }
+
+  // Client controlled video params flow into integer divisions (SIGFPE) in the video pipeline
+  // so ANNOUNCE must reject them with a 400 rather than accept (or throw on) them
+  auto announce_video_params = [&](int cseq, std::string_view video_params) {
+    auto sdp = fmt::format("v=0\n"
+                           "a=x-nv-video[0].clientViewportWd:1920 \n"
+                           "a=x-nv-video[0].clientViewportHt:1080 \n"
+                           "{}"
+                           "\n\n\n\n",
+                           video_params);
+    // tcp_tester re-serialises the request: every payload line is sent with a \r\n ending and the trailing
+    // blank lines are dropped, so Content-length has to match that and not the raw sdp string
+    std::size_t sent_payload_size = 0;
+    for (auto line : utils::split(sdp, '\n')) {
+      if (!line.empty()) {
+        sent_payload_size += line.size() + 2;
+      }
+    }
+    wolf_client->run(fmt::format("ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
+                                 "CSeq: {}\n"
+                                 "X-GS-ClientVersion: 14\n"
+                                 "Host: 0.0.0.0\n"
+                                 "Session:  DEADBEEFCAFE\n"
+                                 "Content-type: application/sdp\n"
+                                 "Content-length: {}\n"
+                                 "\n"
+                                 "{}",
+                                 cseq,
+                                 sent_payload_size,
+                                 sdp),
+                     [cseq](std::optional<RTSP_PACKET> response) {
+                       REQUIRE(response.has_value());
+                       REQUIRE(response.value().response.status_code == 400);
+                       REQUIRE(response.value().seq_number == cseq);
+                     });
+  };
+
+  SECTION("ANNOUNCE rejects maxFPS == 0") {
+    announce_video_params(8, "a=x-nv-video[0].maxFPS:0 \n");
+  }
+
+  SECTION("ANNOUNCE rejects missing maxFPS") {
+    announce_video_params(9, "");
+  }
+
+  SECTION("ANNOUNCE rejects packetSize == 0") {
+    announce_video_params(10, "a=x-nv-video[0].maxFPS:60 \na=x-nv-video[0].packetSize:0 \n");
+  }
+
+  SECTION("ANNOUNCE rejects a packetSize too small for the video headers") {
+    announce_video_params(11, "a=x-nv-video[0].maxFPS:60 \na=x-nv-video[0].packetSize:32 \n");
   }
 }
 
@@ -568,7 +622,7 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                      "Host: 0.0.0.0\n"
                      "Session:  DEADBEEFCAFE\n"
                      "Content-type: application/sdp\n"
-                     "Content-length: 1308"
+                     "Content-length: 1307"
                      "\r\n\r\n" // start of payload
                      "v=0\n"
                      "o=android 0 14 IN IPv4 0.0.0.0\n"
@@ -637,4 +691,85 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                        REQUIRE(response.value().seq_number == 7);
                      });
   }
+}
+TEST_CASE("Multi-chunk message assembly", "[RTSP]") {
+  // A message arriving split across two TCP reads must be fully reassembled, without losing the end of the payload
+  // (see tcp_connection::receive_message).
+  std::string body = "v=0\n"
+                     "o=android 0 14 IN IPv4 192.168.1.227\n"
+                     "s=NVIDIA Streaming Client\n"
+                     "a=x-nv-video[0].clientViewportWd:1920\n"
+                     "a=x-nv-video[0].clientViewportHt:1080\n"
+                     "a=x-nv-video[0].maxFPS:60\n";
+
+  std::string msg = "ANNOUNCE streamid=control/13/0 RTSP/1.0\r\n"
+                    "CSeq: 6\r\n"
+                    "X-GS-ClientVersion: 14\r\n"
+                    "Host: 192.168.1.227\r\n"
+                    "Content-type: application/sdp\r\n"
+                    "Content-length: " +
+                    std::to_string(body.size()) + "\r\n"
+                    "\r\n" +
+                    body;
+
+  // Where the TCP stream is cut in two reads. The old length computation was 2 bytes short and didn't cope with a
+  // Content-length header that was itself split across reads: both lost the end of the message.
+  auto split = GENERATE("in the middle of the body", "before the last 2 bytes", "inside the Content-length value");
+  INFO("split " << split);
+  auto header_end = msg.find("\r\n\r\n") + 4;
+  size_t split_at = 0;
+  if (split == "in the middle of the body"s) {
+    split_at = header_end + body.size() / 2;
+  } else if (split == "before the last 2 bytes"s) {
+    split_at = msg.size() - 2;
+  } else {
+    split_at = msg.find("Content-length: ") + std::string("Content-length: ").size() + 1;
+  }
+  auto first_chunk = msg.substr(0, split_at);
+  auto second_chunk = msg.substr(split_at);
+
+  boost::asio::io_context ioc;
+  auto state = test_init_state();
+
+  tcp::acceptor acceptor(ioc, tcp::endpoint(tcp::v4(), 0));
+  auto port = acceptor.local_endpoint().port();
+
+  // Receiver side: a tcp_connection connected to our acceptor
+  auto tester = tcp_tester::create_client(ioc, port, state);
+  // Sender side: the accepted end of that same connection
+  tcp::socket sender(ioc);
+  acceptor.accept(sender);
+
+  std::optional<RTSP_PACKET> parsed;
+  std::promise<void> done;
+  auto done_fut = done.get_future();
+
+  tester->receive_message([&](std::optional<RTSP_PACKET> result) {
+    parsed = std::move(result);
+    done.set_value();
+  });
+
+  // Run the io_context on a separate thread for the whole exchange
+  auto work_guard = asio::make_work_guard(ioc);
+  std::thread pump([&ioc] { ioc.run(); });
+
+  // Deliver the message in two separate writes
+  asio::write(sender, asio::buffer(first_chunk));
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  asio::write(sender, asio::buffer(second_chunk));
+
+  auto status = done_fut.wait_for(std::chrono::seconds(5));
+  // Always stop and join the pump thread before asserting: a failed REQUIRE with a joinable thread would abort
+  work_guard.reset();
+  ioc.stop();
+  pump.join();
+  REQUIRE(status == std::future_status::ready);
+
+  REQUIRE(parsed.has_value());
+  REQUIRE_THAT(parsed->request.cmd, Equals("ANNOUNCE"));
+  REQUIRE(parsed->seq_number == 6);
+  // The tail of the body must survive
+  REQUIRE(parsed->payloads.size() == 6);
+  REQUIRE_THAT(parsed->payloads.back().first, Equals("a"));
+  REQUIRE_THAT(parsed->payloads.back().second, Equals("x-nv-video[0].maxFPS:60"));
 }

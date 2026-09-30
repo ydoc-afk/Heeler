@@ -40,6 +40,13 @@ constexpr uint32_t FS_PEN_TOUCH_EVENTS = 0x01;
 constexpr uint32_t FS_CONTROLLER_TOUCH_EVENTS = 0x02;
 using namespace wolf::core::audio;
 
+// Bounds for client-controlled video parameters, see announce()
+constexpr int DEFAULT_VIDEO_PACKET_SIZE = 1392;
+// Must leave room for the RTP + Moonlight video headers, the payloader divides by (packet_size - headers)
+constexpr int MIN_VIDEO_PACKET_SIZE = 2 * (sizeof(moonlight::NV_VIDEO_PACKET) + MAX_RTP_HEADER_SIZE);
+constexpr int MAX_VIDEO_PACKET_SIZE = 65507; // Max UDP payload over IPv4
+constexpr int MAX_VIDEO_FPS = 1000;
+
 RTSP_PACKET
 describe(const RTSP_PACKET &req, const events::StreamSession &session) {
   std::vector<std::pair<std::string, std::string>> payloads;
@@ -171,10 +178,27 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
   bool video_format_av1 = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 2;
   auto csc = args["x-nv-video[0].encoderCscMode"].value_or(0);
 
+  // These come straight from the client's SDP: reject anything that would end up as a division by zero
+  // (or an out of range payload size) in the video pipeline instead of trusting it.
+  auto viewport_width = args["x-nv-video[0].clientViewportWd"];
+  auto viewport_height = args["x-nv-video[0].clientViewportHt"];
+  auto max_fps = args["x-nv-video[0].maxFPS"];
+  if (!viewport_width || !viewport_height || !max_fps || *viewport_width <= 0 || *viewport_height <= 0 ||
+      *max_fps <= 0 || *max_fps > MAX_VIDEO_FPS) {
+    logs::log(logs::warning, "[RTSP] ANNOUNCE with missing or invalid video viewport/maxFPS");
+    return error_msg(400, "BAD REQUEST", req.seq_number);
+  }
+
+  auto packet_size = args["x-nv-video[0].packetSize"].value_or(DEFAULT_VIDEO_PACKET_SIZE);
+  if (packet_size < MIN_VIDEO_PACKET_SIZE || packet_size > MAX_VIDEO_PACKET_SIZE) {
+    logs::log(logs::warning, "[RTSP] ANNOUNCE with invalid video packetSize: {}", packet_size);
+    return error_msg(400, "BAD REQUEST", req.seq_number);
+  }
+
   // Video session
-  moonlight::DisplayMode display = {.width = args["x-nv-video[0].clientViewportWd"].value(),
-                                    .height = args["x-nv-video[0].clientViewportHt"].value(),
-                                    .refreshRate = args["x-nv-video[0].maxFPS"].value(),
+  moonlight::DisplayMode display = {.width = *viewport_width,
+                                    .height = *viewport_height,
+                                    .refreshRate = *max_fps,
                                     .hevc_supported = video_format_hevc,
                                     .av1_supported = video_format_av1};
 
@@ -225,7 +249,7 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
 
       .port = session.video_stream_port,
       .timeout_ms = args["x-nv-video[0].timeoutLengthMs"].value_or(7000),
-      .packet_size = args["x-nv-video[0].packetSize"].value_or(1392),
+      .packet_size = packet_size,
       .frames_with_invalid_ref_threshold = args["x-nv-video[0].framesWithInvalidRefThreshold"].value_or(0),
       .fec_percentage = fec_percentage,
       // Moonlight clients always send minRequiredFecPackets=2 (moonlight-common-c/SdpGenerator.c)
