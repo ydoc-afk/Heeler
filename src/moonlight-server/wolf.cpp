@@ -244,8 +244,7 @@ void run() {
   if (audio_server && audio_server->server) {
     pulse_router_state = std::make_shared<audio::PulseAudioRouterState>(audio_server->server);
   } else {
-    logs::log(logs::warning,
-              "No PulseAudio server available, sessions will start without audio");
+    logs::log(logs::warning, "No PulseAudio server available, sessions will start without audio");
   }
   auto pulse_router_handlers = audio::setup_pulseaudio_router_handlers(local_state, pulse_router_state);
   // Setup event handlers for Moonlight related events (Start/Stop stream, hotplug, etc)
