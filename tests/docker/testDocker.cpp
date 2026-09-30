@@ -147,6 +147,34 @@ TEST_CASE("Docker endpoint parsing", "[DOCKER]") {
   REQUIRE(!http.unix_socket.has_value());
 }
 
+TEST_CASE("Docker registry auth from config.json", "[DOCKER]") {
+  REQUIRE(docker::registry_from_image("ubuntu:24.04") == "docker.io");
+  REQUIRE(docker::registry_from_image("library/ubuntu") == "docker.io");
+  REQUIRE(docker::registry_from_image("ghcr.io/games-on-whales/steam:edge") == "ghcr.io");
+  REQUIRE(docker::registry_from_image("localhost:5000/app") == "localhost:5000");
+  REQUIRE(docker::registry_from_image("localhost/app") == "localhost");
+
+  // "auth" is base64("user:p:ss")
+  auto config = R"({"auths": {
+    "https://index.docker.io/v1/": {"auth": "dXNlcjpwOnNz"},
+    "ghcr.io": {"identitytoken": "my-token"},
+    "broken.example.com": {"auth": "bm9jb2xvbg=="}
+  }})";
+
+  // base64url({"serveraddress":"https://index.docker.io/v1/","username":"user","password":"p:ss"})
+  REQUIRE_THAT(docker::registry_auth_from_config(config, "ubuntu"),
+               Equals("eyJzZXJ2ZXJhZGRyZXNzIjoiaHR0cHM6Ly9pbmRleC5kb2NrZXIuaW8vdjEvIiwidXNlcm5hbWUiOiJ1c2VyIiwicGFzc3dv"
+                      "cmQiOiJwOnNzIn0="));
+  // base64url({"serveraddress":"ghcr.io","identitytoken":"my-token"})
+  REQUIRE_THAT(docker::registry_auth_from_config(config, "ghcr.io/games-on-whales/steam:edge"),
+               Equals("eyJzZXJ2ZXJhZGRyZXNzIjoiZ2hjci5pbyIsImlkZW50aXR5dG9rZW4iOiJteS10b2tlbiJ9"));
+
+  REQUIRE(docker::registry_auth_from_config(config, "quay.io/some/image").empty());
+  REQUIRE(docker::registry_auth_from_config(config, "broken.example.com/image").empty());
+  REQUIRE(docker::registry_auth_from_config("not json", "ubuntu").empty());
+  REQUIRE(docker::registry_auth_from_config(R"({"credsStore": "desktop"})", "ubuntu").empty());
+}
+
 TEST_CASE("Parse nulls in json reply", "[DOCKER]") {
   // This is a reply that has been reported in the wild when using Podman
   // Notice the `null` like in the port definition ({"4713/tcp": null})
@@ -638,4 +666,26 @@ TEST_CASE("Docker 29.1.5 fail to parse", "[DOCKER]") {
   REQUIRE(parsed_container.ports[0].private_port == -1); // This was causing issues because we get an empty string now
   REQUIRE(parsed_container.ports[0].public_port == 22);
   REQUIRE(parsed_container.ports[0].type == docker::TCP);
+}
+
+TEST_CASE("Docker pull progress errors", "[DOCKER]") {
+  // Docker reports pull failures as a string
+  REQUIRE(docker::parse_pull_error(R"({"errorDetail":{"message":"manifest unknown"},"error":"manifest unknown"})") ==
+          "manifest unknown");
+  // Be tolerant if it's ever an object
+  REQUIRE(docker::parse_pull_error(R"({"error":{"message":"denied"}})") == R"({"message":"denied"})");
+  // Regular progress lines and garbage aren't errors
+  REQUIRE(!docker::parse_pull_error(R"({"status":"Downloading","id":"abc","progressDetail":{"current":1}})"));
+  REQUIRE(!docker::parse_pull_error("not json"));
+  REQUIRE(!docker::parse_pull_error(""));
+}
+
+TEST_CASE("Docker image default tag", "[DOCKER]") {
+  REQUIRE(docker::with_default_tag("hello-world") == "hello-world:latest");
+  REQUIRE(docker::with_default_tag("hello-world:linux") == "hello-world:linux");
+  REQUIRE(docker::with_default_tag("ghcr.io/games-on-whales/steam") == "ghcr.io/games-on-whales/steam:latest");
+  REQUIRE(docker::with_default_tag("ghcr.io/games-on-whales/steam:edge") == "ghcr.io/games-on-whales/steam:edge");
+  REQUIRE(docker::with_default_tag("localhost:5000/app") == "localhost:5000/app:latest");
+  REQUIRE(docker::with_default_tag("localhost:5000/app:1.0") == "localhost:5000/app:1.0");
+  REQUIRE(docker::with_default_tag("ubuntu@sha256:abc") == "ubuntu@sha256:abc");
 }

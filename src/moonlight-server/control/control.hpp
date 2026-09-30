@@ -27,6 +27,7 @@ std::shared_ptr<ENetPeer> to_shared_ptr(ENetPeer *peer);
 
 bool encrypt_and_send(std::string_view payload,
                       std::string_view aes_key,
+                      const std::shared_ptr<std::atomic<std::uint32_t>> &seq,
                       immer::box<std::shared_ptr<ENetPeer>> connected_client);
 
 bool init();

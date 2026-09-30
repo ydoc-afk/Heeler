@@ -62,6 +62,19 @@ struct Container {
 void init();
 
 /**
+ * Extracts the error message from a line of the image pull progress stream, if the line reports one.
+ * Docker reports failures as `{"error": "<message>", "errorDetail": {"message": "<message>"}}`
+ */
+std::optional<std::string> parse_pull_error(std::string_view progress_line);
+
+/**
+ * Adds the default `:latest` tag to an image reference that has neither a tag nor a digest, like the Docker CLI does.
+ * Without it the Engine API pulls *every* tag of the image.
+ * (ex: `hello-world` -> `hello-world:latest`, `localhost:5000/app` -> `localhost:5000/app:latest`)
+ */
+std::string with_default_tag(std::string_view image);
+
+/**
  * Container engines do not all use the same status code for name conflicts.
  */
 bool is_container_name_conflict_response(long status_code, std::string_view response_body);
@@ -80,16 +93,35 @@ struct DockerEndpoint {
  */
 DockerEndpoint parse_docker_endpoint(std::string_view socket);
 
+/**
+ * The registry an image reference is pulled from, `docker.io` for Docker Hub images
+ * (ex: `ghcr.io/games-on-whales/steam:edge` -> `ghcr.io`, `ubuntu:24.04` -> `docker.io`)
+ */
+std::string registry_from_image(std::string_view image);
+
+/**
+ * Builds the `X-Registry-Auth` header value needed to pull `image`, using the credentials stored in the `auths`
+ * section of a Docker CLI `config.json` (as written by `docker login`).
+ * Returns an empty string when there are no stored credentials for the image registry.
+ *
+ * @see https://docs.docker.com/engine/api/v1.30/#section/Authentication
+ */
+std::string registry_auth_from_config(std::string_view docker_config_json, std::string_view image);
+
 class DockerAPI {
 private:
-  std::string socket_path; // TODO: add B64 registry_auth
+  std::string socket_path;
+  std::string docker_config_path;
   std::string docker_api_version;
 
 public:
   /**
    * @param socket_path: see parse_docker_endpoint() for the accepted formats
+   * @param docker_config_path: optional, path to a Docker CLI `config.json` used to authenticate image pulls
+   *                            when no explicit registry_auth is passed
    */
-  explicit DockerAPI(std::string socket_path = "/var/run/docker.sock") : socket_path(std::move(socket_path)) {
+  explicit DockerAPI(std::string socket_path = "/var/run/docker.sock", std::string docker_config_path = {})
+      : socket_path(std::move(socket_path)), docker_config_path(std::move(docker_config_path)) {
     docker_api_version = get_api_version();
   }
 
