@@ -267,6 +267,18 @@ state::SessionsAtoms test_init_state() {
       immer::vector<events::StreamSession>{session});
 }
 
+TEST_CASE("FEC percentage override", "[RTSP]") {
+  REQUIRE(rtsp::commands::parse_fec_percentage(nullptr) == rtsp::commands::DEFAULT_FEC_PERCENTAGE);
+  REQUIRE(rtsp::commands::parse_fec_percentage("0") == 0);
+  REQUIRE(rtsp::commands::parse_fec_percentage("35") == 35);
+  REQUIRE(rtsp::commands::parse_fec_percentage("100") == 100);
+  REQUIRE(rtsp::commands::parse_fec_percentage("-1") == rtsp::commands::DEFAULT_FEC_PERCENTAGE);
+  REQUIRE(rtsp::commands::parse_fec_percentage("101") == rtsp::commands::DEFAULT_FEC_PERCENTAGE);
+  REQUIRE(rtsp::commands::parse_fec_percentage("abc") == rtsp::commands::DEFAULT_FEC_PERCENTAGE);
+  REQUIRE(rtsp::commands::parse_fec_percentage("20%") == rtsp::commands::DEFAULT_FEC_PERCENTAGE);
+  REQUIRE(rtsp::commands::parse_fec_percentage("") == rtsp::commands::DEFAULT_FEC_PERCENTAGE);
+}
+
 TEST_CASE("Commands (Payload matching)", "[RTSP]") {
   constexpr int port = 8080;
   boost::asio::io_context ioc;
