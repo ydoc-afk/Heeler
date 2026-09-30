@@ -6,8 +6,12 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 #include <curl/curl.h>
+#include <filesystem>
+#include <fstream>
 #include <rest/endpoints.hpp>
 #include <rest/rest.hpp>
+#include <rfl/toml.hpp>
+#include <state/serialised_config.hpp>
 
 using Catch::Matchers::Equals;
 
@@ -41,7 +45,8 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE_THAT(first_app->base.title, Equals("Firefox"));
     REQUIRE_THAT(first_app->base.id, Equals("304556286"));
     REQUIRE_THAT(first_app->base.icon_png_path.value(), Equals("firefox.png"));
-    auto default_video_source = "interpipesrc name=interpipesrc_{}_video";
+    // config.test.toml uses a custom (non interpipesrc) default source, it must be left untouched
+    auto default_video_source = "video_source";
     REQUIRE_THAT(first_app->h264_gst_pipeline,
                  Equals(fmt::format("{} !\ndefault !\nh264_pipeline !\nvideo_sink", default_video_source)));
     REQUIRE_THAT(first_app->hevc_gst_pipeline,
@@ -83,6 +88,48 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
   }
 }
 
+namespace {
+// Copy tests/assets config.test.toml to a temp file, replacing the `default_source` of the video pipeline
+std::string config_with_video_source(const std::string &new_source, const std::string &tag) {
+  std::ifstream in("config.test.toml");
+  std::string toml((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  const std::string old_line = "default_source = \"video_source\"";
+  auto pos = toml.find(old_line);
+  REQUIRE(pos != std::string::npos);
+  toml.replace(pos, old_line.size(), "default_source = '" + new_source + "'");
+  auto path = (std::filesystem::temp_directory_path() / ("heeler-test-" + tag + ".toml")).string();
+  std::ofstream(path) << toml;
+  return path;
+}
+} // namespace
+
+TEST_CASE("LocalState default video source naming", "[LocalState]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto first_app_h264 = [&](const std::string &source, const std::string &tag) {
+    auto path = config_with_video_source(source, tag);
+    auto cfg = state::load_or_default(path, event_bus, running_sessions);
+    std::filesystem::remove(path);
+    return state::get_moonlight_profile(cfg).value()->apps->load().get().at(0)->h264_gst_pipeline;
+  };
+
+  SECTION("A bare interpipesrc gets the name added") {
+    REQUIRE_THAT(first_app_h264("interpipesrc listen-to=x", "bare"),
+                 Catch::Matchers::StartsWith("interpipesrc name=interpipesrc_{}_video listen-to=x !"));
+  }
+
+  SECTION("An already named interpipesrc is untouched") {
+    REQUIRE_THAT(first_app_h264("interpipesrc name=interpipesrc_{}_video listen-to=x", "named"),
+                 Catch::Matchers::StartsWith("interpipesrc name=interpipesrc_{}_video listen-to=x !"));
+  }
+
+  SECTION("A custom source is not corrupted") {
+    // The old code blindly overwrote the first 12 characters of any source without a name=interpipesrc
+    REQUIRE_THAT(first_app_h264("appsrc name=my_source is-live=true", "custom"),
+                 Catch::Matchers::StartsWith("appsrc name=my_source is-live=true !"));
+  }
+}
+
 TEST_CASE("LocalState pairing information", "[LocalState]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto clients_atom = std::make_shared<immer::atom<state::PairedClientList>>();
@@ -104,6 +151,23 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
                        "UkrNfMfXnRzPSwXiNYHZ+UoQuchoMCSAa+kcsQ+zsdPwAJ3stwQGcfpvYhdZv1a1\n"
                        "oPJpyCigkmv0uH4CeJ09A/6Da2uY+HIwVq85qteMVSUTtV0=\n"
                        "-----END CERTIFICATE-----\n";
+
+  SECTION("Re-pairing the same client doesn't duplicate it in config.toml") {
+    auto path = (std::filesystem::temp_directory_path() / "heeler-test-repair.toml").string();
+    std::filesystem::copy_file("config.test.toml", path, std::filesystem::copy_options::overwrite_existing);
+    auto repair_cfg = state::Config{.config_source = path, .paired_clients = clients_atom};
+
+    state::pair(repair_cfg, {a_client_cert});
+    state::pair(repair_cfg, {a_client_cert});
+
+    auto saved = rfl::toml::load<state::WolfConfig, rfl::DefaultIfMissing>(path).value();
+    auto count = std::count_if(saved.paired_clients.begin(), saved.paired_clients.end(), [&](const auto &c) {
+      return c.client_cert == a_client_cert;
+    });
+    std::filesystem::remove(path);
+    REQUIRE(count == 1);
+    REQUIRE_THAT(repair_cfg.paired_clients->load().get(), Catch::Matchers::SizeIs(1));
+  }
 
   SECTION("Checking pairing mechanism") {
     REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == false);
