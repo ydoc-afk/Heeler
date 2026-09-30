@@ -195,9 +195,9 @@ void delete_virtual_sink(const std::shared_ptr<Server> &server, const std::share
 }
 
 void disconnect(const std::shared_ptr<Server> &server) {
-  server->on_ready = boost::promise<bool>();             // Creates a new promise
-  server->on_ready_fut = server->on_ready.get_future();  // ...rebind the future so callers of
-  server->ready_set = false;                             // connected() wait for the new state
+  server->on_ready = boost::promise<bool>();            // Creates a new promise
+  server->on_ready_fut = server->on_ready.get_future(); // ...rebind the future so callers of
+  server->ready_set = false;                            // connected() wait for the new state
   pa_context_disconnect(server->ctx);
 }
 
