@@ -380,12 +380,11 @@ void appasset(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>
   }
 }
 
-std::shared_ptr<events::StreamSession> create_run_session(
-    const SimpleWeb::CaseInsensitiveMultimap &headers,
-    const std::string &client_ip,
-    const state::PairedClient &current_client,
-    immer::box<state::AppState> state,
-    const events::App &run_app) {
+std::shared_ptr<events::StreamSession> create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
+                                                          const std::string &client_ip,
+                                                          const state::PairedClient &current_client,
+                                                          immer::box<state::AppState> state,
+                                                          const events::App &run_app) {
   auto rikey = get_header(headers, "rikey");
   auto rikeyid = get_header(headers, "rikeyid");
   if (!rikey || !rikeyid) {
