@@ -739,6 +739,62 @@ TEST_CASE("Pairing key", "[PAIRING]") {
   }
 }
 
+TEST_CASE("Pairing PIN timeout", "[MoonlightProtocol]") {
+  ServerData server_data;
+  immer::box<state::AppState> app_state = {state::AppState{
+      .host = {state::Host{.server_cert = server_data.server_cert,
+                           .server_pkey = signature::create_key(server_data.server_pkey, true)}},
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = std::make_shared<events::EventBusType>()}};
+
+  // Like the HTTP server: the request is listed as pending, but nobody ever enters the PIN
+  auto pair_handler = app_state->event_bus->register_handler<immer::box<events::PairSignal>>(
+      [pairing_atom = app_state->pairing_atom](const immer::box<events::PairSignal> &signal) {
+        pairing_atom->update([&signal](const auto &m) { return m.set("secret", signal); });
+      });
+
+  auto phase_1 = endpoints::pair_phase1(app_state,
+                                        "0.0.0.0",
+                                        "1.1.1.1",
+                                        "",
+                                        "",
+                                        "1234@0.0.0.0",
+                                        std::chrono::milliseconds(200));
+  REQUIRE(app_state->pairing_atom->load()->size() == 1);
+
+  auto result = phase_1->get_future().get(); // must not block forever
+  REQUIRE(result.status == SimpleWeb::StatusCode::client_error_request_timeout);
+  REQUIRE(result.xml.get<int>("root.paired") == 0);
+  REQUIRE(app_state->pairing_atom->load()->size() == 0);
+  REQUIRE(!app_state->pairing_cache->load()->find("1234@0.0.0.0"));
+
+  // Entering the PIN after the timeout is harmless
+  pair_handler.unregister();
+}
+
+TEST_CASE("Wayland display ready timeout", "[MoonlightProtocol]") {
+  SECTION("Nobody resolves it: the waiter gets an exception") {
+    auto on_ready = std::make_shared<boost::promise<streaming::WaylandDisplayReady>>();
+    auto resolved = std::make_shared<std::atomic_bool>(false);
+    auto future = on_ready->get_future();
+    streaming::fail_display_ready_after(on_ready, resolved, std::chrono::milliseconds(200));
+    REQUIRE(future.wait_for(boost::chrono::seconds(5)) == boost::future_status::ready);
+    REQUIRE(future.has_exception());
+  }
+
+  SECTION("Resolved in time: the timeout doesn't touch it") {
+    auto on_ready = std::make_shared<boost::promise<streaming::WaylandDisplayReady>>();
+    auto resolved = std::make_shared<std::atomic_bool>(false);
+    auto future = on_ready->get_future();
+    streaming::fail_display_ready_after(on_ready, resolved, std::chrono::milliseconds(300));
+    resolved->store(true);
+    on_ready->set_value(streaming::WaylandDisplayReady{.wayland_socket_name = "wayland-1"});
+    std::this_thread::sleep_for(std::chrono::milliseconds(500)); // past the timeout
+    REQUIRE(future.get().wayland_socket_name == "wayland-1");
+  }
+}
+
 TEST_CASE("Stream is stopped when the client never sends the RTP ping", "[MoonlightProtocol]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();

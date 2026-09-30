@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+#include <chrono>
 #include <control/control.hpp>
 #include <crypto/crypto.hpp>
 #include <curl/curl.h>
@@ -19,6 +21,7 @@
 #include <state/config.hpp>
 #include <state/sessions.hpp>
 #include <state/utils.hpp>
+#include <thread>
 #include <utility>
 
 namespace endpoints {
@@ -111,12 +114,19 @@ struct XMLResult {
   XML xml;
 };
 
-inline std::shared_ptr<boost::promise<XMLResult>> pair_phase1(const immer::box<state::AppState> &state,
-                                                              const std::string &client_ip,
-                                                              const std::string &host_ip,
-                                                              const std::string &client_cert_str,
-                                                              const std::string &salt,
-                                                              const std::string &cache_key) {
+/**
+ * How long the user has to enter the PIN before the pair request is dropped
+ */
+constexpr auto PAIR_PIN_TIMEOUT = std::chrono::minutes(5);
+
+inline std::shared_ptr<boost::promise<XMLResult>>
+pair_phase1(const immer::box<state::AppState> &state,
+            const std::string &client_ip,
+            const std::string &host_ip,
+            const std::string &client_cert_str,
+            const std::string &salt,
+            const std::string &cache_key,
+            std::chrono::milliseconds pin_timeout = PAIR_PIN_TIMEOUT) {
   auto future_result = std::make_shared<boost::promise<XMLResult>>();
   if (state->pairing_cache->load()->find(cache_key)) {
     future_result->set_value(
@@ -126,12 +136,38 @@ inline std::shared_ptr<boost::promise<XMLResult>> pair_phase1(const immer::box<s
   }
 
   auto future_pin = std::make_shared<boost::promise<std::string>>();
+  auto pin = future_pin->get_future().share();
+  // The result is set exactly once: either when the PIN arrives or when the user takes too long
+  auto resolved = std::make_shared<std::atomic_bool>(false);
   state->event_bus->fire_event( // Emit a signal and wait for the promise to be fulfilled
       immer::box<events::PairSignal>(
           events::PairSignal{.client_ip = client_ip, .host_ip = host_ip, .user_pin = future_pin}));
 
-  future_pin->get_future().then(
-      [state, salt, client_cert_str, cache_key, future_result](boost::future<std::string> fut_pin) {
+  std::thread([state, pin, future_pin, future_result, resolved, pin_timeout, client_ip]() {
+    if (pin.wait_for(boost::chrono::milliseconds(pin_timeout.count())) == boost::future_status::ready ||
+        resolved->exchange(true)) {
+      return;
+    }
+    logs::log(logs::warning, "Pairing with {} cancelled: the PIN wasn't entered in time", client_ip);
+    // Drop it from the pending requests so that it disappears from the PIN page
+    state->pairing_atom->update([&future_pin](const auto &pairing_map) {
+      auto updated = pairing_map;
+      for (const auto &[secret, pair_request] : pairing_map) {
+        if (pair_request->user_pin == future_pin) {
+          updated = updated.erase(secret);
+        }
+      }
+      return updated;
+    });
+    future_result->set_value(
+        {SimpleWeb::StatusCode::client_error_request_timeout, fail_pair("PIN not entered in time")});
+  }).detach();
+
+  pin.then(
+      [state, salt, client_cert_str, cache_key, future_result, resolved](boost::shared_future<std::string> fut_pin) {
+        if (resolved->exchange(true)) {
+          return; // Already timed out
+        }
         auto server_pem = x509::get_cert_pem(state->host->server_cert);
         auto result = moonlight::pair::get_server_cert(fut_pin.get(), salt, server_pem);
 
