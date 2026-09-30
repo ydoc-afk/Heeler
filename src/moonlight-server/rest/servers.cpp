@@ -4,6 +4,7 @@
 #include <immer/map_transient.hpp>
 #include <netdb.h>
 #include <rest/endpoints.hpp>
+#include <rest/pairing_key.hpp>
 
 namespace HTTPServers {
 
@@ -34,6 +35,31 @@ std::string get_hostname(const std::string &ip) {
   std::string hostname = result->ai_canonname;
   freeaddrinfo(result);
   return hostname;
+}
+
+/**
+ * Escapes a string so that it can be embedded in a JSON string literal
+ * (hostnames come from reverse DNS, so they aren't under our control)
+ */
+std::string json_escape(std::string_view in) {
+  std::string out;
+  for (char c : in) {
+    switch (c) {
+    case '"':
+      out += "\\\"";
+      break;
+    case '\\':
+      out += "\\\\";
+      break;
+    default:
+      if (static_cast<unsigned char>(c) < 0x20) {
+        out += fmt::format("\\u{:04x}", static_cast<int>(static_cast<unsigned char>(c)));
+      } else {
+        out += c;
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -75,8 +101,44 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
   };
 
   // Lists the pending pair requests, so the PIN page (and any other client) can
-  // discover them without reading the server log for the one-shot /pin/#<secret> URL
-  server->resource["^/pin/pending$"]["GET"] = [pairing_atom](auto resp, auto req) {
+  // discover them without reading the server log for the one-shot /pin/#<secret> URL.
+  // The list hands out the secrets needed to submit a PIN, so it requires the preset HEALER_PAIRING_KEY
+  std::string expected_key = utils::get_env("HEALER_PAIRING_KEY", "");
+  if (expected_key.empty()) {
+    logs::log(logs::info, "PIN landing page disabled, set HEALER_PAIRING_KEY to enable it at /pin/");
+  }
+  auto key_attempts = std::make_shared<immer::atom<pairing_key::AttemptsMap>>();
+  server->resource["^/pin/pending$"]["GET"] = [pairing_atom, expected_key, key_attempts](auto resp, auto req) {
+    SimpleWeb::CaseInsensitiveMultimap headers;
+    headers.emplace("Content-Type", "application/json");
+    if (expected_key.empty()) {
+      resp->write(SimpleWeb::StatusCode::client_error_forbidden, R"({"error":"disabled"})", headers);
+      return;
+    }
+
+    auto client_ip = req->remote_endpoint().address().to_string();
+    auto provided = get_header(req->header, "X-Pairing-Key").value_or("");
+    if (provided.empty()) { // Not a guess: the page asks for the key, doesn't count towards the lockout
+      resp->write(SimpleWeb::StatusCode::client_error_unauthorized, R"({"error":"key_required"})", headers);
+      return;
+    }
+    auto result = pairing_key::Result::WRONG_KEY;
+    key_attempts->update([&](const pairing_key::AttemptsMap &attempts) {
+      auto [check_result, updated] =
+          pairing_key::check(attempts, client_ip, provided, expected_key, pairing_key::clock::now());
+      result = check_result;
+      return updated;
+    });
+    if (result == pairing_key::Result::LOCKED_OUT) {
+      logs::log(logs::warning, "[PIN] Too many wrong pairing keys from {}, locked out", client_ip);
+      resp->write(SimpleWeb::StatusCode::client_error_too_many_requests, R"({"error":"locked_out"})", headers);
+      return;
+    } else if (result == pairing_key::Result::WRONG_KEY) {
+      logs::log(logs::warning, "[PIN] Wrong pairing key from {}", client_ip);
+      resp->write(SimpleWeb::StatusCode::client_error_unauthorized, R"({"error":"wrong_key"})", headers);
+      return;
+    }
+
     std::string body = R"({"requests":[)";
     bool first = true;
     for (const auto &[secret, pair_request] : *pairing_atom->load()) {
@@ -84,12 +146,10 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
         body += ',';
       }
       first = false;
-      body += R"({"secret":")" + secret + R"(","client_ip":")" + pair_request->client_ip + R"(","hostname":")" +
-              get_hostname(pair_request->client_ip) + R"("})";
+      body += R"({"secret":")" + json_escape(secret) + R"(","client_ip":")" + json_escape(pair_request->client_ip) +
+              R"(","hostname":")" + json_escape(get_hostname(pair_request->client_ip)) + R"("})";
     }
     body += "]}";
-    SimpleWeb::CaseInsensitiveMultimap headers;
-    headers.emplace("Content-Type", "application/json");
     resp->write(SimpleWeb::StatusCode::success_ok, body, headers);
   };
 
