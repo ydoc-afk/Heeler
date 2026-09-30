@@ -62,6 +62,12 @@ struct Container {
 void init();
 
 /**
+ * Extracts the error message from a line of the image pull progress stream, if the line reports one.
+ * Docker reports failures as `{"error": "<message>", "errorDetail": {"message": "<message>"}}`
+ */
+std::optional<std::string> parse_pull_error(std::string_view progress_line);
+
+/**
  * Container engines do not all use the same status code for name conflicts.
  */
 bool is_container_name_conflict_response(long status_code, std::string_view response_body);

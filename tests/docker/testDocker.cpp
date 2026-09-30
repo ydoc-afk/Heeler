@@ -621,3 +621,15 @@ TEST_CASE("Docker 29.1.5 fail to parse", "[DOCKER]") {
   REQUIRE(parsed_container.ports[0].public_port == 22);
   REQUIRE(parsed_container.ports[0].type == docker::TCP);
 }
+
+TEST_CASE("Docker pull progress errors", "[DOCKER]") {
+  // Docker reports pull failures as a string
+  REQUIRE(docker::parse_pull_error(R"({"errorDetail":{"message":"manifest unknown"},"error":"manifest unknown"})") ==
+          "manifest unknown");
+  // Be tolerant if it's ever an object
+  REQUIRE(docker::parse_pull_error(R"({"error":{"message":"denied"}})") == R"({"message":"denied"})");
+  // Regular progress lines and garbage aren't errors
+  REQUIRE(!docker::parse_pull_error(R"({"status":"Downloading","id":"abc","progressDetail":{"current":1}})"));
+  REQUIRE(!docker::parse_pull_error("not json"));
+  REQUIRE(!docker::parse_pull_error(""));
+}

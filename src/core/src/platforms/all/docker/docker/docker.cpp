@@ -66,6 +66,22 @@ bool is_container_name_conflict_response(long status_code, std::string_view resp
   return has_name_conflict_text(response_body);
 }
 
+std::optional<std::string> parse_pull_error(std::string_view progress_line) {
+  boost::system::error_code ec;
+  auto data = json::parse(progress_line, ec);
+  if (ec || !data.is_object()) {
+    return std::nullopt;
+  }
+  auto error = data.as_object().if_contains("error");
+  if (!error) {
+    return std::nullopt;
+  }
+  if (error->is_string()) {
+    return std::string(error->as_string());
+  }
+  return json::serialize(*error);
+}
+
 using curl_ptr = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>;
 
 /**
@@ -171,12 +187,15 @@ std::vector<Container> DockerAPI::get_containers(bool all) const {
     if (raw_msg && raw_msg->first == 200) {
       auto json = parse_json(raw_msg->second);
       auto containers = json::value_to<std::vector<json::value>>(json);
-      return containers                                                            //
-             | ranges::views::transform([this](const json::value &container) {     //
-                 auto id = container.at("Id").as_string();                         //
-                 return get_by_id(std::string_view{id.data(), id.size()}).value(); //
-               })                                                                  //
-             | ranges::to_vector;                                                  //
+      std::vector<Container> result;
+      for (const auto &container : containers) {
+        auto id = container.at("Id").as_string();
+        // The container might have been removed between the list and the inspect calls
+        if (auto inspected = get_by_id(std::string_view{id.data(), id.size()})) {
+          result.push_back(std::move(*inspected));
+        }
+      }
+      return result;
     } else if (raw_msg) {
       logs::log(logs::warning, "[CURL] error {} - {}", raw_msg->first, raw_msg->second);
     }
@@ -355,15 +374,15 @@ bool DockerAPI::pull_image(std::string_view image_name,
           continue;
         }
 
+        if (auto error = parse_pull_error(line)) {
+          pull_state->error_msg = error;
+        }
+
         try {
           auto data = json::parse(line);
           if (data.is_object()) {
             auto &obj = data.as_object();
             DockerProgressEvent event{};
-
-            if (auto error = obj.find("error"); error != obj.end() && error->value().is_object()) {
-              pull_state->error_msg = error->value().as_string().c_str();
-            }
 
             if (auto it = obj.find("id"); it != obj.end() && it->value().is_string()) {
               event.layer_id = it->value().as_string().c_str();
@@ -408,9 +427,18 @@ bool DockerAPI::pull_image(std::string_view image_name,
       curl_easy_setopt(conn->get(), CURLOPT_HTTPHEADER, headers.get());
     }
 
+    // Big images can legitimately take a long time, so no overall timeout: only give up when the
+    // engine can't be reached or the pull stalls (no progress data at all) for PULL_STALL_TIMEOUT
+    constexpr long PULL_CONNECT_TIMEOUT_S = 10;
+    constexpr long PULL_STALL_TIMEOUT_S = 300;
+    curl_easy_setopt(conn->get(), CURLOPT_CONNECTTIMEOUT, PULL_CONNECT_TIMEOUT_S);
+    curl_easy_setopt(conn->get(), CURLOPT_LOW_SPEED_LIMIT, 1L);
+    curl_easy_setopt(conn->get(), CURLOPT_LOW_SPEED_TIME, PULL_STALL_TIMEOUT_S);
+
     CURLcode res = curl_easy_perform(conn->get());
 
     if (res != CURLE_OK) {
+      logs::log(logs::warning, "[DOCKER] Pulling {} failed: {}", image_name, curl_easy_strerror(res));
       return false;
     }
 
@@ -420,7 +448,7 @@ bool DockerAPI::pull_image(std::string_view image_name,
     if (state.error_msg.has_value()) {
       logs::log(logs::warning, "[DOCKER] error {} - {}", response_code, state.error_msg.value());
       logs::log(logs::info,
-                "If it's an authentication error, you can try adding the env variable DOCKER_AUTH_B64, see: "
+                "If it's an authentication error the image might be private, see: "
                 "https://docs.docker.com/engine/api/v1.30/#section/Authentication");
       return false;
     } else {
