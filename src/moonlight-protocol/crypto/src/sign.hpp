@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
+#include <vector>
 
 namespace signature {
 using EVP_MD_CTX_ptr = std::unique_ptr<EVP_MD_CTX, decltype(&::EVP_MD_CTX_free)>;
@@ -19,12 +20,14 @@ inline std::string sign(std::string_view msg, EVP_PKEY *key_data, const EVP_MD *
     handle_openssl_error("EVP_DigestSignUpdate failed");
 
   std::size_t digest_size = 256;
-  unsigned char digest[digest_size];
+  std::vector<std::uint8_t> digest(digest_size);
 
-  if (EVP_DigestSignFinal(ctx.get(), digest, &digest_size) != 1)
+  if (EVP_DigestSignFinal(ctx.get(), digest.data(), &digest_size) != 1) {
     handle_openssl_error("EVP_DigestSignFinal failed");
+    return {};
+  }
 
-  return {reinterpret_cast<char *>(digest), digest_size};
+  return {reinterpret_cast<char *>(digest.data()), digest_size};
 }
 
 inline bool verify(std::string_view msg, std::string_view signature, EVP_PKEY *key_data, const EVP_MD *digest_type) {

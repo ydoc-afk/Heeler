@@ -76,7 +76,7 @@ Heeler is a fork of [Wolf](https://github.com/games-on-whales/wolf) &mdash; than
 and everyone else for the incredible work on the original project.
 
 - [@Drakulix](https://github.com/Drakulix) for the incredible help given in developing Wolf
-- [@zb140](https://github.com/zb140) for the constant help and support in [GOW](https://github.com/games-on-whales/gow)
+- [@zb140](https://github.com/zb140), [@JBailes](https://github.com/JBailes) and [@salty2011](https://github.com/salty2011) for the constant help and support in [GOW](https://github.com/games-on-whales/gow)
 - [@loki-47-6F-64](https://github.com/loki-47-6F-64) for creating and
   sharing [Sunshine](https://github.com/loki-47-6F-64/sunshine)
 - [@ReenigneArcher](https://github.com/ReenigneArcher) for being the first stargazer of the project and taking care of
