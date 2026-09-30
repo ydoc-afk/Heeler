@@ -23,17 +23,14 @@ namespace detail {
  * Sends a minimal JSON error response to a unix-socket API client. Used as the
  * last-resort error path when a request handler throws (see HTTPServer::handle_request).
  */
-template <typename Socket>
-void send_error_response(const Socket &socket, int status_code, std::string_view message) {
+template <typename Socket> void send_error_response(const Socket &socket, int status_code, std::string_view message) {
   struct ErrorBody {
     bool success = false;
     std::string error;
   };
   auto body = rfl::json::write(ErrorBody{.error = std::string(message)});
-  auto reply = fmt::format("HTTP/1.0 {} Internal Server Error\r\nContent-Length: {}\r\n\r\n{}",
-                           status_code,
-                           body.size(),
-                           body);
+  auto reply =
+      fmt::format("HTTP/1.0 {} Internal Server Error\r\nContent-Length: {}\r\n\r\n{}", status_code, body.size(), body);
   boost::system::error_code ec;
   boost::asio::write(socket->socket, boost::asio::buffer(reply), ec); // best effort: the client may be gone
 }
