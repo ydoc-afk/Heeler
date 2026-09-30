@@ -1,0 +1,157 @@
+name: Docker build
+
+on:
+  push:
+    branches: [stable]
+    tags: ["v*"]
+  # Check that the image still builds when the Docker setup changes (nothing is pushed for PRs)
+  pull_request:
+    paths:
+      - "docker/**"
+      - ".github/workflows/docker-build.yml"
+
+permissions:
+  packages: write
+
+jobs:
+  buildx:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Set derived configuration variables:
+      # - images: images to build (docker and/or github)
+      # - push: if images need to be uploaded to repository
+      # - has_docker_token
+      # - has_github_token
+      # - cache_from: image tag to use for imported cache
+      # - cache_to: image tag to use for exported cache
+      # - github_server_url: reference to source code repository
+      - name: Prepare
+        id: prep
+        run: |
+          REGISTRY_IMAGE="ghcr.io/${{ github.repository_owner }}/wolf"
+          IMAGES="${REGISTRY_IMAGE}"
+          PUSH=${{ github.event_name != 'pull_request' }}
+          echo "has_github_token=true" >> $GITHUB_OUTPUT
+          if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            IMAGES="gameonwhales/wolf,${IMAGES}"
+            echo "has_docker_token=true" >> $GITHUB_OUTPUT
+          fi
+          echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
+          echo "cache_to=type=registry,ref=${REGISTRY_IMAGE}:buildcache,mode=max" >> $GITHUB_OUTPUT
+          echo "images=${IMAGES}" >> $GITHUB_OUTPUT
+          echo "push=${PUSH}" >> $GITHUB_OUTPUT
+          echo "github_server_url=${GITHUB_SERVER_URL}" >> $GITHUB_OUTPUT
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          # list of Docker images to use as base name for tags
+          images: ${{ steps.prep.outputs.images }}
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}
+            type=edge,branch=stable
+            type=ref,event=branch
+            type=raw,value=alpha
+            type=sha
+          flavor: latest=false # let's not produce a :latest tag
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          install: true
+          version: latest
+          driver-opts: image=moby/buildkit:master
+
+      - name: Login to DockerHub
+        if: steps.prep.outputs.has_docker_token != ''
+        uses: docker/login-action@v2
+        with:
+          username: abeltramo
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_TOKEN || github.token }}
+
+      - name: Build GPU Drivers
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: docker/
+          file: docker/gpu-drivers.Dockerfile
+          push: ${{ steps.prep.outputs.push }}
+          tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:2025.05 # TODO: set build version as param
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache
+          cache-to: ${{ steps.prep.outputs.push == 'true' && format('type=registry,ref=ghcr.io/{0}/gpu-drivers:buildcache,mode=max', github.repository_owner) || '' }}
+
+      - name: Build Gstreamer
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: docker/
+          file: docker/gstreamer.Dockerfile
+          push: ${{ steps.prep.outputs.push }}
+          build-args: |
+            GSTREAMER_VERSION=1.26.7
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:2025.05
+          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:1.26.7 # TODO: set gstreamer version as param
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache
+          cache-to: ${{ steps.prep.outputs.push == 'true' && format('type=registry,ref=ghcr.io/{0}/gstreamer:buildcache,mode=max', github.repository_owner) || '' }}
+
+      - name: Build Heeler
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: docker/wolf.Dockerfile
+          push: ${{ steps.prep.outputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:1.26.7
+            IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
+          cache-from: ${{ steps.prep.outputs.cache_from }}
+          cache-to: ${{ steps.prep.outputs.push == 'true' && steps.prep.outputs.cache_to || '' }}
+
+  test_devcontainer:
+    runs-on: ubuntu-latest
+    needs: buildx
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run tests in devcontainer
+        uses: devcontainers/ci@v0.3
+        with:
+          imageTag: devcontainer
+          imageName: ghcr.io/${{ github.repository_owner }}/wolf
+          cacheFrom: ghcr.io/${{ github.repository_owner }}/wolf:buildcache
+          push: never
+          # TODO:
+          # runCmd: |
+          #   cmake -Bbuild \
+          #         -H$GITHUB_WORKSPACE \
+          #         -DCMAKE_BUILD_TYPE=Debug \
+          #         -DCMAKE_CXX_EXTENSIONS=OFF \
+          #         -DTEST_VIRTUAL_INPUT=OFF \
+          #         -DTEST_DOCKER=ON \
+          #         -DTEST_RUST_WAYLAND=ON \
+          #         -DTEST_NVIDIA=OFF \
+          #         -DTEST_EXCEPTIONS=OFF \
+          #         -DTEST_UHID=OFF \
+          #         -G Ninja
+          #
+          #   ninja -j $(nproc) wolftests
+          #
+          #   ./wolftests --reporter JUnit::out=${{runner.workspace}}/report.xml --reporter console::out=-::colour-mode=ansi
