@@ -9,6 +9,29 @@
 namespace wolf::core::sessions {
 
 /**
+ * Hands the pen/touchpad/touch screen nodes of a device to the lobby's compositor, so that it follows the device
+ * into the lobby. Each node is only added once, the compositor has no way of removing it.
+ */
+void add_to_lobby_compositor(const events::Lobby &lobby,
+                             const std::vector<std::map<std::string, std::string>> &udev_events) {
+  auto wl = *lobby.wayland_display->load();
+  if (!wl) {
+    return;
+  }
+  for (const auto &node : pointer_input_nodes(udev_events)) {
+    bool is_new = false;
+    lobby.compositor_input_nodes->update([&node, &is_new](const immer::set<std::string> &nodes) {
+      is_new = !nodes.count(node);
+      return nodes.insert(node);
+    });
+    if (is_new) {
+      logs::log(logs::debug, "[LOBBY] Adding input device {} to lobby {} compositor", node, lobby.id);
+      virtual_display::add_input_device(*wl, node);
+    }
+  }
+}
+
+/**
  * @brief Removes the StreamSession from the input Lobby and switches everything to the original session
  *
  * @note Leaving a lobby may have side effects,
@@ -51,7 +74,20 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
                                   .udev_events = plug_ev.udev_events,
                                   .udev_hw_db_entries = plug_ev.udev_hw_db_entries}});
   }
-  // TODO: hotplug pen_tablet and touch_screen
+
+  // Same for the pen tablet (created on first use). The touch screen is handled by the compositor (see above).
+  // The session's own compositor already knows every device node: they're always added to it on creation.
+  if (session.pen_tablet->has_value()) {
+    const auto &pen = session.pen_tablet->value();
+    ev_bus->fire_event(immer::box<events::PlugDeviceEvent>(
+        events::PlugDeviceEvent{.session_id = std::to_string(session.session_id),
+                                .udev_events = pen.get_udev_events(),
+                                .udev_hw_db_entries = pen.get_udev_hw_db_entries()}));
+    ev_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
+        events::UnplugDeviceEvent{.session_id = lobby.id,
+                                  .udev_events = pen.get_udev_events(),
+                                  .udev_hw_db_entries = pen.get_udev_hw_db_entries()}});
+  }
 
   // Switch audio/video gstreamer stream producers
   ev_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
@@ -234,8 +270,23 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
           // Add it to the lobby runner's devices queue, addressed to the lobby id
           // (same routing the PlugDeviceEvent relay performs for connected sessions)
           lobby->plugged_devices_queue->push(immer::box<events::PlugDeviceEvent>{plug_ev});
+          // The DualSense touchpad is read by the compositor
+          add_to_lobby_compositor(*lobby, plug_ev.udev_events);
         }
-        // TODO: hotplug pen_tablet
+
+        // Same for the pen tablet (created on first use)
+        if (session->pen_tablet->has_value()) {
+          const auto &pen = session->pen_tablet->value();
+          events::PlugDeviceEvent plug_ev{.session_id = lobby->id,
+                                          .udev_events = pen.get_udev_events(),
+                                          .udev_hw_db_entries = pen.get_udev_hw_db_entries()};
+          app_state->event_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
+              events::UnplugDeviceEvent{.session_id = std::to_string(session->session_id),
+                                        .udev_events = plug_ev.udev_events,
+                                        .udev_hw_db_entries = plug_ev.udev_hw_db_entries}});
+          lobby->plugged_devices_queue->push(immer::box<events::PlugDeviceEvent>{plug_ev});
+          add_to_lobby_compositor(*lobby, plug_ev.udev_events);
+        }
 
         // Update the lobby with the new session
         lobby->connected_sessions->update([session](const immer::vector<immer::box<std::string>> &connected_sessions) {
@@ -314,6 +365,8 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
               events::PlugDeviceEvent{.session_id = lobby->id,
                                       .udev_events = plug_device_event->udev_events,
                                       .udev_hw_db_entries = plug_device_event->udev_hw_db_entries}});
+          // Devices created while in the lobby (ex: the pen on first use) must reach the lobby's compositor too
+          add_to_lobby_compositor(*lobby, plug_device_event->udev_events);
         }
       }));
 
