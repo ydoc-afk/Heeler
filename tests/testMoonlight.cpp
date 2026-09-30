@@ -5,7 +5,13 @@
 #include <catch2/matchers/catch_matchers_contains.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
+#include <curl/curl.h>
+#include <filesystem>
+#include <fstream>
 #include <rest/endpoints.hpp>
+#include <rest/rest.hpp>
+#include <rfl/toml.hpp>
+#include <state/serialised_config.hpp>
 
 using Catch::Matchers::Equals;
 
@@ -13,6 +19,7 @@ using Catch::Matchers::Equals;
 #include <moonlight/protocol.hpp>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
+#include <rest/pairing_key.hpp>
 #include <sessions/handlers.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
@@ -39,7 +46,8 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE_THAT(first_app->base.title, Equals("Firefox"));
     REQUIRE_THAT(first_app->base.id, Equals("304556286"));
     REQUIRE_THAT(first_app->base.icon_png_path.value(), Equals("firefox.png"));
-    auto default_video_source = "interpipesrc name=interpipesrc_{}_video";
+    // config.test.toml uses a custom (non interpipesrc) default source, it must be left untouched
+    auto default_video_source = "video_source";
     REQUIRE_THAT(first_app->h264_gst_pipeline,
                  Equals(fmt::format("{} !\ndefault !\nh264_pipeline !\nvideo_sink", default_video_source)));
     REQUIRE_THAT(first_app->hevc_gst_pipeline,
@@ -81,6 +89,48 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
   }
 }
 
+namespace {
+// Copy tests/assets config.test.toml to a temp file, replacing the `default_source` of the video pipeline
+std::string config_with_video_source(const std::string &new_source, const std::string &tag) {
+  std::ifstream in("config.test.toml");
+  std::string toml((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  const std::string old_line = "default_source = \"video_source\"";
+  auto pos = toml.find(old_line);
+  REQUIRE(pos != std::string::npos);
+  toml.replace(pos, old_line.size(), "default_source = '" + new_source + "'");
+  auto path = (std::filesystem::temp_directory_path() / ("heeler-test-" + tag + ".toml")).string();
+  std::ofstream(path) << toml;
+  return path;
+}
+} // namespace
+
+TEST_CASE("LocalState default video source naming", "[LocalState]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto first_app_h264 = [&](const std::string &source, const std::string &tag) {
+    auto path = config_with_video_source(source, tag);
+    auto cfg = state::load_or_default(path, event_bus, running_sessions);
+    std::filesystem::remove(path);
+    return state::get_moonlight_profile(cfg).value()->apps->load().get().at(0)->h264_gst_pipeline;
+  };
+
+  SECTION("A bare interpipesrc gets the name added") {
+    REQUIRE_THAT(first_app_h264("interpipesrc listen-to=x", "bare"),
+                 Catch::Matchers::StartsWith("interpipesrc name=interpipesrc_{}_video listen-to=x !"));
+  }
+
+  SECTION("An already named interpipesrc is untouched") {
+    REQUIRE_THAT(first_app_h264("interpipesrc name=interpipesrc_{}_video listen-to=x", "named"),
+                 Catch::Matchers::StartsWith("interpipesrc name=interpipesrc_{}_video listen-to=x !"));
+  }
+
+  SECTION("A custom source is not corrupted") {
+    // The old code blindly overwrote the first 12 characters of any source without a name=interpipesrc
+    REQUIRE_THAT(first_app_h264("appsrc name=my_source is-live=true", "custom"),
+                 Catch::Matchers::StartsWith("appsrc name=my_source is-live=true !"));
+  }
+}
+
 TEST_CASE("LocalState pairing information", "[LocalState]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto clients_atom = std::make_shared<immer::atom<state::PairedClientList>>();
@@ -102,6 +152,23 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
                        "UkrNfMfXnRzPSwXiNYHZ+UoQuchoMCSAa+kcsQ+zsdPwAJ3stwQGcfpvYhdZv1a1\n"
                        "oPJpyCigkmv0uH4CeJ09A/6Da2uY+HIwVq85qteMVSUTtV0=\n"
                        "-----END CERTIFICATE-----\n";
+
+  SECTION("Re-pairing the same client doesn't duplicate it in config.toml") {
+    auto path = (std::filesystem::temp_directory_path() / "heeler-test-repair.toml").string();
+    std::filesystem::copy_file("config.test.toml", path, std::filesystem::copy_options::overwrite_existing);
+    auto repair_cfg = state::Config{.config_source = path, .paired_clients = clients_atom};
+
+    state::pair(repair_cfg, {a_client_cert});
+    state::pair(repair_cfg, {a_client_cert});
+
+    auto saved = rfl::toml::load<state::WolfConfig, rfl::DefaultIfMissing>(path).value();
+    auto count = std::count_if(saved.paired_clients.begin(), saved.paired_clients.end(), [&](const auto &c) {
+      return c.client_cert == a_client_cert;
+    });
+    std::filesystem::remove(path);
+    REQUIRE(count == 1);
+    REQUIRE_THAT(repair_cfg.paired_clients->load().get(), Catch::Matchers::SizeIs(1));
+  }
 
   SECTION("Checking pairing mechanism") {
     REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == false);
@@ -530,12 +597,14 @@ TEST_CASE("Multiple users", "[HTTP]") {
   auto client1_ip = "0.0.0.0";
   auto client1_headers = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}};
   auto session1 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session1);
 
   REQUIRE(session1->video_stream_port == 48100);
   REQUIRE(session1->audio_stream_port == 48200);
 
   app_state.running_sessions->update([session1](auto &sessions) { return sessions.push_back(*session1); });
   auto session2 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session2);
 
   REQUIRE(session2->video_stream_port == 48100);
   REQUIRE(session2->audio_stream_port == 48200);
@@ -545,6 +614,7 @@ TEST_CASE("Multiple users", "[HTTP]") {
       [session2](auto &sessions) { return immer::vector<events::StreamSession>{*session2}; });
   // We should now assign back the now available [48100, 48200] ports
   auto session3 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session3);
 
   REQUIRE(session3->video_stream_port == 48100);
   REQUIRE(session3->audio_stream_port == 48200);
@@ -555,9 +625,118 @@ TEST_CASE("Multiple users", "[HTTP]") {
   });
   // We should now assign the 2nd port (even if we have 3 sessions) because of port clash
   auto session4 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
+  REQUIRE(session4);
 
   REQUIRE(session4->video_stream_port == 48100);
   REQUIRE(session4->audio_stream_port == 48200);
+
+  // Missing rikey/rikeyid must yield nullptr, not a crash
+  auto no_keys = SimpleWeb::CaseInsensitiveMultimap{};
+  REQUIRE(endpoints::https::create_run_session(no_keys, client1_ip, client1, app_state, app1) == nullptr);
+
+  // Malformed mode/surroundAudioInfo must not crash, falls back to the defaults
+  auto bad_mode = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"},
+                                                     {"rikeyid", "5678"},
+                                                     {"mode", "abc"},
+                                                     {"surroundAudioInfo", "xyz"}};
+  auto bad_mode_session = endpoints::https::create_run_session(bad_mode, client1_ip, client1, app_state, app1);
+  REQUIRE(bad_mode_session);
+  REQUIRE(bad_mode_session->display_mode.width == 1920);
+  REQUIRE(bad_mode_session->display_mode.height == 1080);
+  REQUIRE(bad_mode_session->display_mode.refreshRate == 60);
+  REQUIRE(bad_mode_session->audio_channel_count == 2);
+
+  // A "mode" with the wrong number of components is also rejected in favour of the default
+  auto short_mode = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}, {"mode", "1280x720"}};
+  auto short_mode_session = endpoints::https::create_run_session(short_mode, client1_ip, client1, app_state, app1);
+  REQUIRE(short_mode_session);
+  REQUIRE(short_mode_session->display_mode.width == 1920);
+
+  // Well formed values are honoured
+  auto good_mode = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}, {"mode", "1280x720x30"}};
+  auto good_mode_session = endpoints::https::create_run_session(good_mode, client1_ip, client1, app_state, app1);
+  REQUIRE(good_mode_session);
+  REQUIRE(good_mode_session->display_mode.width == 1280);
+  REQUIRE(good_mode_session->display_mode.height == 720);
+  REQUIRE(good_mode_session->display_mode.refreshRate == 30);
+}
+
+TEST_CASE("HTTP /unpair input validation", "[HTTP]") {
+  // /unpair is unauthenticated: malformed requests must get an error reply, never take the server down
+  auto app_state = immer::box<state::AppState>(
+      state::AppState{.pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+                      .pairing_atom = std::make_shared<
+                          immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+                      .event_bus = std::make_shared<events::EventBusType>()});
+
+  constexpr int port = 47790;
+  HttpServer server;
+  std::thread server_thread([&] { HTTPServers::startServer(&server, app_state, port); });
+  std::this_thread::sleep_for(std::chrono::milliseconds(300)); // Wait for the server to start
+
+  auto get_status = [&](const std::string &path) {
+    auto curl = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>(curl_easy_init(), curl_easy_cleanup);
+    curl_easy_setopt(curl.get(), CURLOPT_URL, fmt::format("http://127.0.0.1:{}{}", port, path).c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 5L);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, +[](char *, size_t s, size_t n, void *) { return s * n; });
+    long status = 0;
+    if (curl_easy_perform(curl.get()) == CURLE_OK) {
+      curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &status);
+    }
+    return status;
+  };
+
+  auto missing_id = get_status("/unpair");
+  auto unknown_client = get_status("/unpair?uniqueid=nobody");
+  auto still_alive = get_status("/unpair?uniqueid=again");
+
+  server.stop();
+  server_thread.join();
+
+  REQUIRE(missing_id == 400);
+  REQUIRE(unknown_client == 400);
+  REQUIRE(still_alive == 400);
+}
+
+TEST_CASE("Pairing key", "[PAIRING]") {
+  using namespace pairing_key;
+  auto now = clock::now();
+  AttemptsMap attempts;
+
+  REQUIRE(matches("correct horse", "correct horse"));
+  REQUIRE(!matches("correct hors", "correct horse"));
+  REQUIRE(!matches("", "correct horse"));
+
+  SECTION("Right key") {
+    auto [result, updated] = check(attempts, "10.0.0.2", "secret", "secret", now);
+    REQUIRE(result == Result::OK);
+    REQUIRE(updated.size() == 0);
+  }
+
+  SECTION("Lockout after too many wrong keys") {
+    for (int i = 0; i < MAX_FAILURES; i++) {
+      auto [result, updated] = check(attempts, "10.0.0.2", "guess", "secret", now);
+      REQUIRE(result == Result::WRONG_KEY);
+      attempts = updated;
+    }
+    // Even the right key is rejected while locked out
+    REQUIRE(check(attempts, "10.0.0.2", "secret", "secret", now + std::chrono::seconds(30)).first ==
+            Result::LOCKED_OUT);
+    // Other clients aren't affected
+    REQUIRE(check(attempts, "10.0.0.3", "secret", "secret", now).first == Result::OK);
+    // After the lockout expires the right key works again and clears the failures
+    auto [result, updated] = check(attempts, "10.0.0.2", "secret", "secret", now + LOCKOUT);
+    REQUIRE(result == Result::OK);
+    REQUIRE(!updated.find("10.0.0.2"));
+  }
+
+  SECTION("Failures outside the window start a new one") {
+    auto [first, after_first] = check(attempts, "10.0.0.2", "guess", "secret", now);
+    REQUIRE(first == Result::WRONG_KEY);
+    auto [second, after_second] = check(after_first, "10.0.0.2", "guess", "secret", now + LOCKOUT);
+    REQUIRE(second == Result::WRONG_KEY);
+    REQUIRE(after_second.find("10.0.0.2")->failures == 1);
+  }
 }
 
 TEST_CASE("Stream is stopped when the client never sends the RTP ping", "[MoonlightProtocol]") {
