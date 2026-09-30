@@ -582,6 +582,14 @@ TEST_CASE("launch", "[MoonlightProtocol]") {
                                 "</root>");
 }
 
+TEST_CASE("launch error", "[MoonlightProtocol]") {
+  auto result = launch_error(404, "App not found");
+  REQUIRE(result.get<int>("root.<xmlattr>.status_code") == 404);
+  REQUIRE_THAT(result.get<std::string>("root.<xmlattr>.status_message"), Equals("App not found"));
+  REQUIRE(result.get<int>("root.gamesession") == 0);
+  REQUIRE(!result.get_optional<std::string>("root.sessionUrl0"));
+}
+
 TEST_CASE("Multiple users", "[HTTP]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto paired_clients = std::shared_ptr<immer::atom<state::PairedClientList>>();

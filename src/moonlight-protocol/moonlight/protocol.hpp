@@ -153,7 +153,11 @@ XML applist(const immer::vector<App> &apps);
  * @return:
  */
 XML launch_success(const std::string &local_ip, const std::string &rtsp_port);
-// TODO: launch_error()
+
+/**
+ * A failed launch/resume: Moonlight shows `message` to the user in its error dialog
+ */
+XML launch_error(int status_code, const std::string &message);
 
 XML launch_resume(const std::string &local_ip, const std::string &rtsp_port);
 } // namespace moonlight
