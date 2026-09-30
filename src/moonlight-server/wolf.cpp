@@ -2,11 +2,13 @@
 #include <atomic>
 #include <audio/pulse_router.hpp>
 #include <boost/asio.hpp>
+#include <charconv>
 #include <chrono>
 #include <control/control.hpp>
 #include <core/docker.hpp>
 #include <core/gstreamer.hpp>
 #include <csignal>
+#include <cstring>
 #include <exceptions/exceptions.h>
 #include <filesystem>
 #include <immer/array_transient.hpp>
@@ -160,7 +162,13 @@ std::optional<sessions::AudioServer> setup_audio_server(const std::string &host_
                   }
             })");
     if (container && docker_api.start_by_id(container.value().id)) {
-      auto ms = std::stoi(utils::get_env("HEALER_PULSE_CONTAINER_TIMEOUT_MS", "2000"));
+      int ms = 2000;
+      auto ms_str = utils::get_env("HEALER_PULSE_CONTAINER_TIMEOUT_MS", "2000");
+      if (auto [end, ec] = std::from_chars(ms_str, ms_str + std::strlen(ms_str), ms);
+          ec != std::errc() || *end != '\0' || ms < 0) {
+        logs::log(logs::warning, "Invalid HEALER_PULSE_CONTAINER_TIMEOUT_MS '{}', using 2000", ms_str);
+        ms = 2000;
+      }
       std::this_thread::sleep_for(std::chrono::milliseconds(ms)); // TODO: Better way of knowing when ready?
       return {{.server = audio::connect(fmt::format("{}/pulse-socket", runtime_dir)), .container = container}};
     }
