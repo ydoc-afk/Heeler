@@ -1,15 +1,41 @@
 #pragma once
 
+#include <boost/asio/buffer.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/write.hpp>
+#include <fmt/format.h>
 #include <functional>
+#include <helpers/logger.hpp>
 #include <immer/box.hpp>
 #include <optional>
 #include <rfl.hpp>
+#include <rfl/json.hpp>
 #include <string>
+#include <string_view>
 #include <utility.hpp>
 
 namespace wolf::api {
+
+namespace detail {
+
+/**
+ * Sends a minimal JSON error response to a unix-socket API client. Used as the
+ * last-resort error path when a request handler throws (see HTTPServer::handle_request).
+ */
+template <typename Socket> void send_error_response(const Socket &socket, int status_code, std::string_view message) {
+  struct ErrorBody {
+    bool success = false;
+    std::string error;
+  };
+  auto body = rfl::json::write(ErrorBody{.error = std::string(message)});
+  auto reply =
+      fmt::format("HTTP/1.0 {} Internal Server Error\r\nContent-Length: {}\r\n\r\n{}", status_code, body.size(), body);
+  boost::system::error_code ec;
+  boost::asio::write(socket->socket, boost::asio::buffer(reply), ec); // best effort: the client may be gone
+}
+
+} // namespace detail
 
 enum class HTTPMethod {
   GET,
@@ -57,7 +83,21 @@ public:
     if (it != endpoints_.end()) {
       auto boxed_request = immer::box<HTTPRequest>(request);
       auto handler = it->second.handler;
-      boost::asio::post(pool_, [handler, boxed_request, socket]() { handler(*boxed_request, socket); });
+      boost::asio::post(pool_, [handler, boxed_request, socket]() {
+        // Handlers run on the pool: an uncaught exception (e.g. std::stoul on a
+        // malformed body, .value() on a missing field) would propagate out of the
+        // pool thread and std::terminate the whole process. Catch it and answer
+        // with a 500 so one bad request can't take the API down.
+        try {
+          handler(*boxed_request, socket);
+        } catch (const std::exception &e) {
+          logs::log(logs::error, "[API] Unhandled exception in request handler: {}", e.what());
+          detail::send_error_response(socket, 500, e.what());
+        } catch (...) {
+          logs::log(logs::error, "[API] Unknown exception in request handler");
+          detail::send_error_response(socket, 500, "unknown error");
+        }
+      });
       return true;
     }
     return false;
