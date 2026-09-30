@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <helpers/utils.hpp>
+#include <sessions/common.hpp>
 #include <state/utils.hpp>
 
 TEST_CASE("get_env reads a set variable", "[utils]") {
@@ -84,4 +85,22 @@ TEST_CASE("is_icon_allowed only serves configured icons, the state folder and tr
   REQUIRE(utils::is_icon_allowed("https://icons.local/a.png", base.string(), configured, {"icons.local"}));
 
   fs::remove_all(base);
+}
+
+TEST_CASE("pointer_input_nodes picks the nodes the compositor reads", "[utils]") {
+  std::vector<std::map<std::string, std::string>> pen = {
+      {{"DEVNAME", "/dev/input/event20"}, {"ID_INPUT_TABLET", "1"}},
+      {{"DEVNAME", "/dev/input/mouse5"}, {"ID_INPUT_TABLET", "1"}}, // legacy mousedev node: not for libinput
+  };
+  REQUIRE(wolf::core::sessions::pointer_input_nodes(pen) == std::vector<std::string>{"/dev/input/event20"});
+
+  std::vector<std::map<std::string, std::string>> dualsense = {
+      {{"DEVNAME", "/dev/input/event21"}, {"ID_INPUT_JOYSTICK", "1"}},
+      {{"DEVNAME", "/dev/input/event22"}, {"ID_INPUT_TOUCHPAD", "1"}},
+      {{"DEVNAME", "/dev/hidraw3"}},
+      {{"ID_INPUT_TOUCHSCREEN", "1"}}, // no DEVNAME
+  };
+  REQUIRE(wolf::core::sessions::pointer_input_nodes(dualsense) == std::vector<std::string>{"/dev/input/event22"});
+
+  REQUIRE(wolf::core::sessions::pointer_input_nodes({}).empty());
 }
