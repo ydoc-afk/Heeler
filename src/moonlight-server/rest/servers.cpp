@@ -5,6 +5,7 @@
 #include <netdb.h>
 #include <rest/endpoints.hpp>
 #include <rest/pairing_key.hpp>
+#include <rest/pairing_webhook.hpp>
 
 namespace HTTPServers {
 
@@ -182,12 +183,14 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     send_xml<SimpleWeb::HTTP>(resp, SimpleWeb::StatusCode::success_ok, xml);
   };
 
+  std::string pairing_webhook_url = utils::get_env("HEALER_PAIRING_WEBHOOK", "");
   auto pair_handler = state->event_bus->register_handler<immer::box<events::PairSignal>>(
-      [pairing_atom](const immer::box<events::PairSignal> pair_sig) {
-        pairing_atom->update([&pair_sig](const immer::map<std::string, immer::box<events::PairSignal>> &m) {
-          auto secret = crypto::str_to_hex(crypto::random(8));
-          auto http_port = std::to_string(state::get_port(state::HTTP_PORT));
-          logs::log(logs::info, "Insert pin at http://{}:{}/pin/#{}", pair_sig->host_ip, http_port, secret);
+      [pairing_atom, pairing_webhook_url](const immer::box<events::PairSignal> pair_sig) {
+        auto secret = crypto::str_to_hex(crypto::random(8));
+        auto http_port = std::to_string(state::get_port(state::HTTP_PORT));
+        auto pin_url = fmt::format("http://{}:{}/pin/#{}", pair_sig->host_ip, http_port, secret);
+        logs::log(logs::info, "Insert pin at {}", pin_url);
+        pairing_atom->update([&pair_sig, &secret](const immer::map<std::string, immer::box<events::PairSignal>> &m) {
           // filter out any other (dangling) pair request from the same client
           auto t_map = m.transient();
           for (auto [key, value] : m) {
@@ -199,6 +202,10 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
           t_map.set(secret, pair_sig);
           return t_map.persistent();
         });
+        // Only once the request is listed as pending, so that the link works right away
+        if (!pairing_webhook_url.empty()) {
+          pairing_webhook::notify(pairing_webhook_url, pair_sig->client_ip, pin_url, get_hostname);
+        }
       });
 
   // Start server (blocks until stopped, so the PairSignal handler above

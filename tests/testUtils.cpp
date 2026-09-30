@@ -6,8 +6,11 @@
 #include <filesystem>
 #include <fstream>
 #include <helpers/utils.hpp>
+#include <boost/asio.hpp>
+#include <rest/pairing_webhook.hpp>
 #include <sessions/common.hpp>
 #include <state/utils.hpp>
+#include <thread>
 
 TEST_CASE("get_env reads a set variable", "[utils]") {
   setenv("HEALER_UTILS_TEST_PLAIN", "plain-value", 1);
@@ -85,6 +88,60 @@ TEST_CASE("is_icon_allowed only serves configured icons, the state folder and tr
   REQUIRE(utils::is_icon_allowed("https://icons.local/a.png", base.string(), configured, {"icons.local"}));
 
   fs::remove_all(base);
+}
+
+TEST_CASE("Pairing webhook payload", "[PAIRING]") {
+  auto payload = pairing_webhook::make_payload("10.0.0.5", "steamdeck", "http://10.0.0.1:47989/pin/#abc");
+  auto parsed = rfl::json::read<pairing_webhook::Payload>(payload).value();
+  REQUIRE(parsed.client_ip == "10.0.0.5");
+  REQUIRE(parsed.hostname == "steamdeck");
+  REQUIRE(parsed.pin_url == "http://10.0.0.1:47989/pin/#abc");
+  // Slack reads `text`, Discord reads `content`
+  REQUIRE(parsed.text == "Heeler: steamdeck (10.0.0.5) wants to pair, enter its PIN at http://10.0.0.1:47989/pin/#abc");
+  REQUIRE(parsed.content == parsed.text);
+  // Without reverse DNS the IP is used on its own
+  REQUIRE(rfl::json::read<pairing_webhook::Payload>(pairing_webhook::make_payload("10.0.0.5", "", "u")).value().text ==
+          "Heeler: 10.0.0.5 wants to pair, enter its PIN at u");
+}
+
+TEST_CASE("Pairing webhook POSTs the payload", "[PAIRING]") {
+  // A one-shot HTTP server that records the request
+  boost::asio::io_context ioc;
+  boost::asio::ip::tcp::acceptor acceptor(ioc, {boost::asio::ip::make_address("127.0.0.1"), 0});
+  auto port = acceptor.local_endpoint().port();
+  std::string received;
+  std::thread server([&]() {
+    auto socket = acceptor.accept();
+    std::string buffer(8192, '\0');
+    std::size_t total = 0;
+    // Read until we have the headers and the whole body
+    while (true) {
+      total += socket.read_some(boost::asio::buffer(buffer.data() + total, buffer.size() - total));
+      auto header_end = buffer.find("\r\n\r\n");
+      if (header_end != std::string::npos && header_end < total) {
+        auto cl = buffer.find("Content-Length: ");
+        auto length = std::stoul(buffer.substr(cl + 16, buffer.find("\r\n", cl) - cl - 16));
+        if (total >= header_end + 4 + length) {
+          break;
+        }
+      }
+    }
+    received = buffer.substr(0, total);
+    std::string reply = "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    boost::asio::write(socket, boost::asio::buffer(reply));
+  });
+
+  auto payload = pairing_webhook::make_payload("10.0.0.5", "", "http://host/pin/#s");
+  auto status = pairing_webhook::post(fmt::format("http://127.0.0.1:{}/hook", port), payload);
+  server.join();
+
+  REQUIRE(status == 204);
+  REQUIRE(received.starts_with("POST /hook HTTP/1.1\r\n"));
+  REQUIRE(received.find("Content-Type: application/json") != std::string::npos);
+  REQUIRE(received.ends_with(payload));
+
+  // An unreachable webhook is reported, not thrown
+  REQUIRE(pairing_webhook::post("http://127.0.0.1:1/hook", payload) == 0);
 }
 
 TEST_CASE("pointer_input_nodes picks the nodes the compositor reads", "[utils]") {
