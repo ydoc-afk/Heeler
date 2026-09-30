@@ -2,6 +2,7 @@
 #include <events/events.hpp>
 #include <immer/atom.hpp>
 #include <immer/map_transient.hpp>
+#include <netdb.h>
 #include <rest/endpoints.hpp>
 
 namespace HTTPServers {
@@ -16,6 +17,24 @@ constexpr char const *pin_html =
 
 namespace bt = boost::property_tree;
 using namespace wolf::core;
+
+/**
+ * Best-effort reverse DNS lookup for a client IP, so the PIN page can show e.g. "steamdeck"
+ * instead of a bare IP. Returns an empty string when the IP can't be resolved
+ * (common on LANs without PTR records), the page then falls back to the IP.
+ */
+std::string get_hostname(const std::string &ip) {
+  struct addrinfo hints {};
+  struct addrinfo *result = nullptr;
+  hints.ai_family = AF_INET;
+  hints.ai_flags = AI_CANONNAME;
+  if (getaddrinfo(ip.c_str(), nullptr, &hints, &result) != 0 || result == nullptr) {
+    return {};
+  }
+  std::string hostname = result->ai_canonname;
+  freeaddrinfo(result);
+  return hostname;
+}
 
 /**
  * @brief Start the generic server on the specified port
@@ -53,6 +72,25 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     } catch (const std::exception &e) {
       *resp << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << strlen(e.what()) << "\r\n\r\n" << e.what();
     }
+  };
+
+  // Lists the pending pair requests, so the PIN page (and any other client) can
+  // discover them without reading the server log for the one-shot /pin/#<secret> URL
+  server->resource["^/pin/pending$"]["GET"] = [pairing_atom](auto resp, auto req) {
+    std::string body = R"({"requests":[)";
+    bool first = true;
+    for (const auto &[secret, pair_request] : *pairing_atom->load()) {
+      if (!first) {
+        body += ',';
+      }
+      first = false;
+      body += R"({"secret":")" + secret + R"(","client_ip":")" + pair_request->client_ip + R"(","hostname":")" +
+              get_hostname(pair_request->client_ip) + R"("})";
+    }
+    body += "]}";
+    SimpleWeb::CaseInsensitiveMultimap headers;
+    headers.emplace("Content-Type", "application/json");
+    resp->write(SimpleWeb::StatusCode::success_ok, body, headers);
   };
 
   server->resource["^/unpair$"]["GET"] = [&state](auto resp, auto req) {
