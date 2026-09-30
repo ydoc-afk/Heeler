@@ -5,6 +5,7 @@
 #include <netdb.h>
 #include <rest/endpoints.hpp>
 #include <rest/pairing_key.hpp>
+#include <rest/preset_pin.hpp>
 
 namespace HTTPServers {
 
@@ -182,8 +183,30 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     send_xml<SimpleWeb::HTTP>(resp, SimpleWeb::StatusCode::success_ok, xml);
   };
 
+  auto preset_pin = preset_pin::parse(utils::get_env("HEALER_PAIRING_PIN"));
+  if (preset_pin) {
+    logs::log(logs::warning,
+              "HEALER_PAIRING_PIN is set: any client that knows it can pair, remove it once you're done pairing");
+  }
+  auto preset_pin_attempts = std::make_shared<immer::atom<preset_pin::AttemptsMap>>();
   auto pair_handler = state->event_bus->register_handler<immer::box<events::PairSignal>>(
-      [pairing_atom](const immer::box<events::PairSignal> pair_sig) {
+      [pairing_atom, preset_pin, preset_pin_attempts](const immer::box<events::PairSignal> pair_sig) {
+        if (preset_pin) {
+          bool allowed = false;
+          preset_pin_attempts->update([&](const preset_pin::AttemptsMap &attempts) {
+            auto [is_allowed, updated] = preset_pin::allow(attempts, pair_sig->client_ip, preset_pin::clock::now());
+            allowed = is_allowed;
+            return updated;
+          });
+          if (allowed) {
+            logs::log(logs::info, "Answering pairing request from {} with HEALER_PAIRING_PIN", pair_sig->client_ip);
+            pair_sig->user_pin->set_value(*preset_pin);
+            return;
+          }
+          logs::log(logs::warning,
+                    "Too many pairing attempts from {}, it has to be approved with the PIN page instead",
+                    pair_sig->client_ip);
+        }
         pairing_atom->update([&pair_sig](const immer::map<std::string, immer::box<events::PairSignal>> &m) {
           auto secret = crypto::str_to_hex(crypto::random(8));
           auto http_port = std::to_string(state::get_port(state::HTTP_PORT));

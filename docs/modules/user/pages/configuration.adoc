@@ -81,6 +81,10 @@ The `WOLF_*` names are still accepted as deprecated aliases for backwards compat
 |_(unset)_
 |Comma-separated extra hosts that the API's `get-icon` endpoint may download icons from (https only), on top of `games-on-whales.github.io`. Icons set in the config are always allowed.
 
+|HEALER_PAIRING_PIN
+|_(unset)_
+|A fixed 4-digit PIN that Heeler answers pairing requests with, so no PIN has to be typed on the host. Only useful with clients that let you choose the PIN, like `moonlight pair <host> --pin 1234` (moonlight-qt); the phone apps and the regular desktop app always pick their own PIN. Anyone who knows it can pair, so set it only while pairing. Each client IP gets at most 5 automatic attempts per minute, after that the request has to be approved on the PIN page.
+
 |HEALER_DEFAULT_RUN_UID
 |1000
 |The default UID that apps run as, applied to newly paired clients; existing clients keep their saved values
