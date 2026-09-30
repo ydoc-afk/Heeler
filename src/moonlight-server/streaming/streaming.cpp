@@ -21,7 +21,23 @@ using namespace wolf::core;
 struct GstBusData {
   std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready;
   gst_element_ptr wayland_plugin;
+  /* on_ready can only be resolved once: by the compositor, a pipeline failure or the timeout, whichever is first */
+  std::shared_ptr<std::atomic_bool> ready_resolved = std::make_shared<std::atomic_bool>(false);
 };
+
+void fail_display_ready_after(std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
+                              std::shared_ptr<std::atomic_bool> resolved,
+                              std::chrono::milliseconds timeout) {
+  std::thread([on_ready, resolved, timeout]() {
+    auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!resolved->load() && std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    if (!resolved->exchange(true)) {
+      on_ready->set_exception(boost::copy_exception(std::runtime_error("Wayland display wasn't ready in time")));
+    }
+  }).detach();
+}
 
 gboolean structure_each(GQuark field_id, const GValue *value, gpointer user_data) {
   auto field_str = std::string(g_quark_to_string(field_id));
@@ -35,8 +51,10 @@ gboolean structure_each(GQuark field_id, const GValue *value, gpointer user_data
   if (field_str == "WAYLAND_DISPLAY") {
     logs::log(logs::info, "Wayland display ready, listening on: {}", value_str);
     auto bus_data = static_cast<GstBusData *>(user_data);
-    bus_data->on_ready->set_value(
-        WaylandDisplayReady{.wayland_socket_name = value_str, .wayland_plugin = bus_data->wayland_plugin});
+    if (!bus_data->ready_resolved->exchange(true)) {
+      bus_data->on_ready->set_value(
+          WaylandDisplayReady{.wayland_socket_name = value_str, .wayland_plugin = bus_data->wayland_plugin});
+    }
   }
 
   return TRUE;
@@ -94,7 +112,8 @@ void start_video_producer(const std::string &session_id,
                           const wolf::core::virtual_display::DisplayMode &display_mode,
                           std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
-                          std::shared_ptr<events::EventBusType> event_bus) {
+                          std::shared_ptr<events::EventBusType> event_bus,
+                          std::chrono::milliseconds ready_timeout) {
   auto pipeline = fmt::format("waylanddisplaysrc name=wolf_wayland_source render_node={render_node} ! "
                               "{buffer_format}, width={width}, height={height}, framerate={fps}/1 ! \n"    //
                               "interpipesink sync=true async=false name={session_id}_video max-buffers=1", //
@@ -107,9 +126,10 @@ void start_video_producer(const std::string &session_id,
   logs::log(logs::debug, "[GSTREAMER] Starting video producer: {}", pipeline);
   auto bus_data_ptr =
       std::make_shared<GstBusData>(GstBusData{.on_ready = std::move(on_ready), .wayland_plugin = nullptr});
+  fail_display_ready_after(bus_data_ptr->on_ready, bus_data_ptr->ready_resolved, ready_timeout);
   std::shared_ptr<NeedContextData> ctx_data_ptr =
       std::make_shared<NeedContextData>(NeedContextData{.device_path = render_node, .gst_context = video_context});
-  run_pipeline(pipeline, [=](auto pipeline) {
+  bool started = run_pipeline(pipeline, [=](auto pipeline) {
     logs::log(logs::debug, "Setting up waylanddisplaysrc");
 
     auto wayland_plugin_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source");
@@ -139,6 +159,13 @@ void start_video_producer(const std::string &session_id,
 
     return immer::array<immer::box<events::EventBusHandlers>>{std::move(stop_handler), std::move(stop_lobby_handler)};
   });
+  if (!bus_data_ptr->ready_resolved->exchange(true)) {
+    logs::log(logs::error,
+              "[GSTREAMER] Video producer for {} {} before the Wayland display was ready",
+              session_id,
+              started ? "stopped" : "failed to start");
+    bus_data_ptr->on_ready->set_exception(boost::copy_exception(std::runtime_error("Video producer stopped")));
+  }
 }
 
 void start_audio_producer(const std::string &session_id,
@@ -172,7 +199,7 @@ void start_audio_producer(const std::string &session_id,
                               fmt::arg("server_name", server_name));
   logs::log(logs::debug, "[GSTREAMER] Starting audio producer: {}", pipeline);
 
-  run_pipeline(pipeline, [=](auto pipeline) {
+  bool started = run_pipeline(pipeline, [=](auto pipeline) {
     auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
         [session_id, pipeline](const immer::box<events::StopStreamEvent> &ev) {
           if (std::to_string(ev->session_id) == session_id) {
@@ -191,6 +218,9 @@ void start_audio_producer(const std::string &session_id,
 
     return immer::array<immer::box<events::EventBusHandlers>>{std::move(stop_handler), std::move(stop_lobby_handler)};
   });
+  if (!started) {
+    logs::log(logs::error, "[GSTREAMER] Audio producer for {} failed to start, audio won't be available", session_id);
+  }
 }
 
 namespace custom_sink {
@@ -409,7 +439,7 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
       }});
   std::shared_ptr<NeedContextData> ctx_data_ptr = std::make_shared<NeedContextData>(
       NeedContextData{.device_path = video_session->render_node, .gst_context = video_context});
-  run_pipeline(pipeline, [video_session, event_bus, udp_sink, ctx_data_ptr](auto pipeline) {
+  bool started = run_pipeline(pipeline, [video_session, event_bus, udp_sink, ctx_data_ptr](auto pipeline) {
     if (auto app_sink_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_udp_sink")) {
       logs::log(logs::debug, "Setting up wolf_udp_sink");
       g_assert(GST_IS_APP_SINK(app_sink_el));
@@ -493,6 +523,13 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
                                                               std::move(switch_producer_handler),
                                                               std::move(stop_handler)};
   });
+  if (!started) {
+    logs::log(logs::error,
+              "[GSTREAMER] Video pipeline for session {} failed to start, stopping",
+              video_session->session_id);
+    event_bus->fire_event(
+        immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = video_session->session_id}));
+  }
 }
 
 /**
@@ -529,7 +566,7 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
       .socket = audio_socket,
       .client_endpoint = std::make_shared<udp::endpoint>(boost::asio::ip::make_address(client_ip), client_port)});
 
-  run_pipeline(pipeline, [session_id = audio_session->session_id, udp_sink, event_bus](auto pipeline) {
+  bool started = run_pipeline(pipeline, [session_id = audio_session->session_id, udp_sink, event_bus](auto pipeline) {
     if (auto app_sink_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_udp_sink")) {
       logs::log(logs::debug, "Setting up wolf_udp_sink");
       g_assert(GST_IS_APP_SINK(app_sink_el));
@@ -590,6 +627,11 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
                                                               std::move(switch_producer_handler),
                                                               std::move(stop_handler)};
   });
+  if (!started) {
+    logs::log(logs::error,
+              "[GSTREAMER] Audio pipeline for session {} failed to start, audio won't be available",
+              audio_session->session_id);
+  }
 }
 
 } // namespace streaming

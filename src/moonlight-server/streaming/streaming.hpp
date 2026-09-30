@@ -1,5 +1,8 @@
 #pragma once
+#include <atomic>
 #include <boost/asio.hpp>
+#include <boost/exception_ptr.hpp>
+#include <chrono>
 #include <core/gstreamer.hpp>
 #include <core/virtual-display.hpp>
 #include <events/events.hpp>
@@ -30,13 +33,32 @@ struct WaylandDisplayReady {
   gstreamer::gst_element_ptr wayland_plugin;
 };
 
+/**
+ * How long the compositor has to report its Wayland display before the session/lobby is given up on
+ */
+constexpr auto DISPLAY_READY_TIMEOUT = std::chrono::seconds(30);
+
+/**
+ * Resolves `on_ready` with an exception after `timeout`, unless `resolved` was set first.
+ * Makes sure that whoever waits on the Wayland display is always woken up.
+ */
+void fail_display_ready_after(std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
+                              std::shared_ptr<std::atomic_bool> resolved,
+                              std::chrono::milliseconds timeout);
+
+/**
+ * Starts the compositor + video producer pipeline, blocks until the pipeline ends.
+ * `on_ready` is always resolved: with the Wayland display once it's up, or with an exception if the pipeline
+ * fails/ends before that or if the display isn't ready within `ready_timeout`.
+ */
 void start_video_producer(const std::string &session_id,
                           const std::string &buffer_format,
                           const std::string &render_node,
                           const wolf::core::virtual_display::DisplayMode &display_mode,
                           std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
-                          std::shared_ptr<events::EventBusType> event_bus);
+                          std::shared_ptr<events::EventBusType> event_bus,
+                          std::chrono::milliseconds ready_timeout = DISPLAY_READY_TIMEOUT);
 
 void start_audio_producer(const std::string &session_id,
                           const std::shared_ptr<events::EventBusType> &event_bus,

@@ -160,9 +160,20 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
           }).detach();
         }
 
-        // TODO: timeout? What if the wayland display is never ready?
+        // on_ready is always resolved by start_video_producer (display ready, pipeline failure or timeout)
         auto w_display_ready = on_ready->get_future().then([session, runtime_dir](auto fut) {
-          streaming::WaylandDisplayReady ready = fut.get();
+          streaming::WaylandDisplayReady ready;
+          try {
+            ready = fut.get();
+          } catch (const std::exception &e) {
+            logs::log(logs::error,
+                      "[STREAM_SESSION] Wayland display for session {} not available ({}), stopping",
+                      session->session_id,
+                      e.what());
+            session->event_bus->fire_event(
+                immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session->session_id}));
+            return;
+          }
 
           auto wl_state = virtual_display::create_wayland_display(ready.wayland_plugin, ready.wayland_socket_name);
           // Set the wayland display

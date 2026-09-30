@@ -108,7 +108,17 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
 
           auto w_display_ready = on_ready->get_future().then(
               [lobby, runtime_dir, ev_bus, audio_server, lobby_settings, host = app_state->host](auto fut) {
-                streaming::WaylandDisplayReady ready = fut.get();
+                streaming::WaylandDisplayReady ready;
+                try {
+                  ready = fut.get();
+                } catch (const std::exception &e) {
+                  logs::log(logs::error,
+                            "[LOBBY] Wayland display for lobby {} not available ({}), stopping",
+                            lobby->id,
+                            e.what());
+                  ev_bus->fire_event(immer::box<events::StopLobbyEvent>{events::StopLobbyEvent{.lobby_id = lobby->id}});
+                  return;
+                }
 
                 auto wl_state =
                     virtual_display::create_wayland_display(ready.wayland_plugin, ready.wayland_socket_name);
