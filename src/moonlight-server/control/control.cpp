@@ -36,17 +36,18 @@ bool init() {
   return true;
 }
 
-enet_host create_host(std::string_view host, std::uint16_t port, std::size_t peers) {
+std::optional<enet_host> create_host(std::string_view host, std::uint16_t port, std::size_t peers) {
   ENetAddress addr;
   enet_address_set_host(&addr, host.data());
   enet_address_set_port(&addr, port);
 
-  auto enet_host = enet_host_create(AF_INET, &addr, peers, 0, 0, 0);
-  if (enet_host == nullptr) {
-    logs::log(logs::error, "An error occurred while trying to create an ENet server host.");
+  auto raw_host = enet_host_create(AF_INET, &addr, peers, 0, 0, 0);
+  if (raw_host == nullptr) {
+    logs::log(logs::error, "An error occurred while trying to create an ENet server host on port {}.", port);
+    return std::nullopt;
   }
 
-  return {enet_host, free_host};
+  return enet_host{raw_host, free_host};
 }
 
 /**
@@ -84,9 +85,12 @@ bool send_packet(std::string_view payload, ENetPeer *peer) {
 
 bool encrypt_and_send(std::string_view payload,
                       std::string_view aes_key,
+                      const std::shared_ptr<std::atomic<std::uint32_t>> &seq,
                       immer::box<std::shared_ptr<ENetPeer>> connected_client) {
   if (auto enet_client = connected_client->get()) {
-    auto encrypted = control::encrypt_packet(aes_key, 0, payload); // TODO: seq?
+    // Every packet must use a fresh IV: GCM (key, IV) reuse leaks the keystream
+    // and the GHASH subkey (see Sunshine's per-message control seq)
+    auto encrypted = control::encrypt_packet(aes_key, seq->fetch_add(1), payload);
     return send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_client);
   } else {
     logs::log(logs::warning, "[ENET] Failed to send packet, client is not connected");
@@ -135,7 +139,12 @@ void run_control(int port,
                  std::chrono::milliseconds timeout,
                  const std::string &host_ip) {
 
-  enet_host host = create_host(host_ip, port, peers);
+  auto host_opt = create_host(host_ip, port, peers);
+  if (!host_opt) {
+    logs::log(logs::error, "Control server could not be started on port {}, aborting control loop", port);
+    return;
+  }
+  enet_host host = std::move(*host_opt);
   logs::log(logs::info, "Control server started on port: {}", port);
 
   ENetEvent event;
@@ -149,7 +158,7 @@ void run_control(int port,
         for (auto &[peer, session] : *connected_clients.load()) {
           if (session->session_id == ev->session_id) {
             immer::box<std::shared_ptr<ENetPeer>> enet_client = {to_shared_ptr(peer)};
-            encrypt_and_send(plaintext, session->aes_key, enet_client);
+            encrypt_and_send(plaintext, session->aes_key, session->control_seq, enet_client);
             return;
           }
         }

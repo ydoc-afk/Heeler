@@ -89,13 +89,13 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
-void remove_pair_session(const immer::box<state::AppState> &state, const std::string &cache_key) {
+inline void remove_pair_session(const immer::box<state::AppState> &state, const std::string &cache_key) {
   state->pairing_cache->update([&cache_key](const immer::map<std::string, state::PairCache> &pairing_cache) {
     return pairing_cache.erase(cache_key);
   });
 }
 
-XML fail_pair(const std::string &status_msg) {
+inline XML fail_pair(const std::string &status_msg) {
   logs::log(logs::warning, "Failed pairing: {}", status_msg);
 
   XML tree;
@@ -111,12 +111,12 @@ struct XMLResult {
   XML xml;
 };
 
-std::shared_ptr<boost::promise<XMLResult>> pair_phase1(const immer::box<state::AppState> &state,
-                                                       const std::string &client_ip,
-                                                       const std::string &host_ip,
-                                                       const std::string &client_cert_str,
-                                                       const std::string &salt,
-                                                       const std::string &cache_key) {
+inline std::shared_ptr<boost::promise<XMLResult>> pair_phase1(const immer::box<state::AppState> &state,
+                                                              const std::string &client_ip,
+                                                              const std::string &host_ip,
+                                                              const std::string &client_cert_str,
+                                                              const std::string &salt,
+                                                              const std::string &cache_key) {
   auto future_result = std::make_shared<boost::promise<XMLResult>>();
   if (state->pairing_cache->load()->find(cache_key)) {
     future_result->set_value(
@@ -150,10 +150,10 @@ std::shared_ptr<boost::promise<XMLResult>> pair_phase1(const immer::box<state::A
   return future_result;
 }
 
-XMLResult pair_phase2(const immer::box<state::AppState> &state,
-                      state::PairCache &client_cache,
-                      const std::string &client_challenge,
-                      const std::string &cache_key) {
+inline XMLResult pair_phase2(const immer::box<state::AppState> &state,
+                             state::PairCache &client_cache,
+                             const std::string &client_challenge,
+                             const std::string &cache_key) {
   if (client_cache.last_phase != state::PAIR_PHASE::GETSERVERCERT) {
     return {SimpleWeb::StatusCode::client_error_bad_request, fail_pair("Out of order pair request (phase 2)")};
   }
@@ -173,10 +173,10 @@ XMLResult pair_phase2(const immer::box<state::AppState> &state,
   return {SimpleWeb::StatusCode::success_ok, xml};
 }
 
-XMLResult pair_phase3(const immer::box<state::AppState> &state,
-                      state::PairCache &client_cache,
-                      const std::string &server_challenge,
-                      const std::string &cache_key) {
+inline XMLResult pair_phase3(const immer::box<state::AppState> &state,
+                             state::PairCache &client_cache,
+                             const std::string &server_challenge,
+                             const std::string &cache_key) {
   if (client_cache.last_phase != state::PAIR_PHASE::CLIENTCHALLENGE) {
     return {SimpleWeb::StatusCode::client_error_bad_request, fail_pair("Out of order pair request (phase 3)")};
   }
@@ -193,7 +193,7 @@ XMLResult pair_phase3(const immer::box<state::AppState> &state,
   return {SimpleWeb::StatusCode::success_ok, xml};
 }
 
-XMLResult pair_phase4(state::PairCache &client_cache, const std::string &client_secret) {
+inline XMLResult pair_phase4(state::PairCache &client_cache, const std::string &client_secret) {
   if (client_cache.last_phase != state::PAIR_PHASE::SERVERCHALLENGERESP) {
     return {SimpleWeb::StatusCode::client_error_bad_request, fail_pair("Out of order pair request (phase 4)")};
   }
@@ -218,9 +218,9 @@ XMLResult pair_phase4(state::PairCache &client_cache, const std::string &client_
   return {is_paired ? SimpleWeb::StatusCode::success_ok : SimpleWeb::StatusCode::client_error_bad_request, xml};
 }
 
-void pair(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTP>::Response> &response,
-          const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTP>::Request> &request,
-          const immer::box<state::AppState> &state) {
+inline void pair(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTP>::Response> &response,
+                 const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTP>::Request> &request,
+                 const immer::box<state::AppState> &state) {
   log_req<SimpleWeb::HTTP>(request);
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
@@ -314,8 +314,8 @@ namespace https {
 /**
  * The check here is implicit, by running over HTTPS we are checking the client certificate
  */
-void pair(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
-          const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request) {
+inline void pair(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+                 const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request) {
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
   auto phrase = get_header(headers, "phrase");
   // PHASE 5 (over HTTPS)
@@ -329,9 +329,9 @@ void pair(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Re
   }
 }
 
-void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
-             const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
-             const immer::box<state::AppState> &state) {
+inline void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+                    const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+                    const immer::box<state::AppState> &state) {
   log_req<SimpleWeb::HTTPS>(request);
 
   auto profile = state::get_moonlight_profile(state->config);
@@ -349,9 +349,9 @@ void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>:
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
-void appasset(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
-              const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
-              const immer::box<state::AppState> &state) {
+inline void appasset(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+                     const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+                     const immer::box<state::AppState> &state) {
   log_req<SimpleWeb::HTTPS>(request);
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
@@ -380,11 +380,11 @@ void appasset(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>
   }
 }
 
-std::shared_ptr<events::StreamSession> create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
-                                                          const std::string &client_ip,
-                                                          const state::PairedClient &current_client,
-                                                          immer::box<state::AppState> state,
-                                                          const events::App &run_app) {
+inline std::shared_ptr<events::StreamSession> create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
+                                                                 const std::string &client_ip,
+                                                                 const state::PairedClient &current_client,
+                                                                 immer::box<state::AppState> state,
+                                                                 const events::App &run_app) {
   auto rikey = get_header(headers, "rikey");
   auto rikeyid = get_header(headers, "rikeyid");
   if (!rikey || !rikeyid) {
@@ -422,21 +422,21 @@ std::shared_ptr<events::StreamSession> create_run_session(const SimpleWeb::CaseI
   return base_session;
 }
 
-std::string get_rtsp_ip_string(const std::string &local_ip, const events::StreamSession &session) {
+inline std::string get_rtsp_ip_string(const std::string &local_ip, const events::StreamSession &session) {
   auto use_fake_ip = utils::get_env("HEALER_USE_RTSP_FAKE_IP", "TRUE") == "TRUE"s;
   return use_fake_ip ? session.rtsp_fake_ip : local_ip;
 }
 
 // Forward declaration so launch() can delegate to resume() when a session is already running.
-void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
-            const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
-            const state::PairedClient &current_client,
-            const immer::box<state::AppState> &state);
+inline void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+                   const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+                   const state::PairedClient &current_client,
+                   const immer::box<state::AppState> &state);
 
-void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
-            const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
-            const state::PairedClient &current_client,
-            const immer::box<state::AppState> &state) {
+inline void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+                   const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+                   const state::PairedClient &current_client,
+                   const immer::box<state::AppState> &state) {
   log_req<SimpleWeb::HTTPS>(request);
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
@@ -476,10 +476,10 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
-void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
-            const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
-            const state::PairedClient &current_client,
-            const immer::box<state::AppState> &state) {
+inline void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+                   const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+                   const state::PairedClient &current_client,
+                   const immer::box<state::AppState> &state) {
   log_req<SimpleWeb::HTTPS>(request);
 
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
@@ -513,10 +513,10 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   }
 }
 
-void cancel(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
-            const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
-            const state::PairedClient &current_client,
-            const immer::box<state::AppState> &state) {
+inline void cancel(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+                   const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+                   const state::PairedClient &current_client,
+                   const immer::box<state::AppState> &state) {
   log_req<SimpleWeb::HTTPS>(request);
 
   auto client_session = state::get_session_by_client(state->running_sessions->load(), current_client);

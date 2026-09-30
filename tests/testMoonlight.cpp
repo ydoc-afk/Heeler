@@ -5,7 +5,9 @@
 #include <catch2/matchers/catch_matchers_contains.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
+#include <curl/curl.h>
 #include <rest/endpoints.hpp>
+#include <rest/rest.hpp>
 
 using Catch::Matchers::Equals;
 
@@ -13,6 +15,7 @@ using Catch::Matchers::Equals;
 #include <moonlight/protocol.hpp>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
+#include <rest/pairing_key.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
 
@@ -591,4 +594,82 @@ TEST_CASE("Multiple users", "[HTTP]") {
   REQUIRE(good_mode_session->display_mode.width == 1280);
   REQUIRE(good_mode_session->display_mode.height == 720);
   REQUIRE(good_mode_session->display_mode.refreshRate == 30);
+}
+
+TEST_CASE("HTTP /unpair input validation", "[HTTP]") {
+  // /unpair is unauthenticated: malformed requests must get an error reply, never take the server down
+  auto app_state = immer::box<state::AppState>(
+      state::AppState{.pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+                      .pairing_atom = std::make_shared<
+                          immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+                      .event_bus = std::make_shared<events::EventBusType>()});
+
+  constexpr int port = 47790;
+  HttpServer server;
+  std::thread server_thread([&] { HTTPServers::startServer(&server, app_state, port); });
+  std::this_thread::sleep_for(std::chrono::milliseconds(300)); // Wait for the server to start
+
+  auto get_status = [&](const std::string &path) {
+    auto curl = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>(curl_easy_init(), curl_easy_cleanup);
+    curl_easy_setopt(curl.get(), CURLOPT_URL, fmt::format("http://127.0.0.1:{}{}", port, path).c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 5L);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, +[](char *, size_t s, size_t n, void *) { return s * n; });
+    long status = 0;
+    if (curl_easy_perform(curl.get()) == CURLE_OK) {
+      curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &status);
+    }
+    return status;
+  };
+
+  auto missing_id = get_status("/unpair");
+  auto unknown_client = get_status("/unpair?uniqueid=nobody");
+  auto still_alive = get_status("/unpair?uniqueid=again");
+
+  server.stop();
+  server_thread.join();
+
+  REQUIRE(missing_id == 400);
+  REQUIRE(unknown_client == 400);
+  REQUIRE(still_alive == 400);
+}
+
+TEST_CASE("Pairing key", "[PAIRING]") {
+  using namespace pairing_key;
+  auto now = clock::now();
+  AttemptsMap attempts;
+
+  REQUIRE(matches("correct horse", "correct horse"));
+  REQUIRE(!matches("correct hors", "correct horse"));
+  REQUIRE(!matches("", "correct horse"));
+
+  SECTION("Right key") {
+    auto [result, updated] = check(attempts, "10.0.0.2", "secret", "secret", now);
+    REQUIRE(result == Result::OK);
+    REQUIRE(updated.size() == 0);
+  }
+
+  SECTION("Lockout after too many wrong keys") {
+    for (int i = 0; i < MAX_FAILURES; i++) {
+      auto [result, updated] = check(attempts, "10.0.0.2", "guess", "secret", now);
+      REQUIRE(result == Result::WRONG_KEY);
+      attempts = updated;
+    }
+    // Even the right key is rejected while locked out
+    REQUIRE(check(attempts, "10.0.0.2", "secret", "secret", now + std::chrono::seconds(30)).first ==
+            Result::LOCKED_OUT);
+    // Other clients aren't affected
+    REQUIRE(check(attempts, "10.0.0.3", "secret", "secret", now).first == Result::OK);
+    // After the lockout expires the right key works again and clears the failures
+    auto [result, updated] = check(attempts, "10.0.0.2", "secret", "secret", now + LOCKOUT);
+    REQUIRE(result == Result::OK);
+    REQUIRE(!updated.find("10.0.0.2"));
+  }
+
+  SECTION("Failures outside the window start a new one") {
+    auto [first, after_first] = check(attempts, "10.0.0.2", "guess", "secret", now);
+    REQUIRE(first == Result::WRONG_KEY);
+    auto [second, after_second] = check(after_first, "10.0.0.2", "guess", "secret", now + LOCKOUT);
+    REQUIRE(second == Result::WRONG_KEY);
+    REQUIRE(after_second.find("10.0.0.2")->failures == 1);
+  }
 }
