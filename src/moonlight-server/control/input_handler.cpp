@@ -11,6 +11,26 @@
 
 namespace control {
 
+std::optional<InputPacketBuffer> sanitize_input_packet(std::string_view raw) {
+  if (raw.size() < sizeof(INPUT_PKT)) {
+    return std::nullopt;
+  }
+  InputPacketBuffer buffer;
+  // Nothing reads past the biggest packet struct, extra trailing bytes can be dropped
+  std::copy_n(raw.begin(), std::min(raw.size(), MAX_INPUT_PACKET_SIZE), buffer.data);
+
+  if (buffer.packet()->type == UTF8_TEXT) {
+    // utf8_text() derives the text length from data_size, it must match what was actually sent
+    auto data_size = boost::endian::big_to_native(buffer.packet()->data_size);
+    auto header_size = sizeof(INPUT_PKT::packet_type) + 2;
+    if (data_size < header_size || data_size - header_size > UTF8_TEXT_MAX_LEN ||
+        data_size - header_size > raw.size() - sizeof(INPUT_PKT)) {
+      return std::nullopt;
+    }
+  }
+  return buffer;
+}
+
 using namespace wolf::core::virtual_display;
 using namespace wolf::core::input;
 using namespace wolf::core;

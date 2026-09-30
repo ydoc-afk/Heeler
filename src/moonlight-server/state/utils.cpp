@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <curl/curl.h>
 #include <fstream>
 #include <helpers/logger.hpp>
@@ -73,6 +74,49 @@ std::optional<std::string> get_icon(std::string_view base_local_path, std::strin
   }
 
   return std::nullopt;
+}
+
+bool is_icon_allowed(std::string_view icon_path,
+                     std::string_view base_local_path,
+                     const std::vector<std::string> &configured_icons,
+                     const std::vector<std::string> &trusted_url_hosts) {
+  if (std::find(configured_icons.begin(), configured_icons.end(), icon_path) != configured_icons.end()) {
+    return true;
+  }
+  if (icon_path.starts_with("http")) {
+    constexpr std::string_view https = "https://";
+    if (!icon_path.starts_with(https)) {
+      return false;
+    }
+    auto authority = icon_path.substr(https.size());
+    authority = authority.substr(0, authority.find_first_of("/?#"));
+    // No user info (https://trusted@evil) and no custom port, just the bare host
+    if (authority.find_first_of("@:") != std::string_view::npos) {
+      return false;
+    }
+    return std::find(trusted_url_hosts.begin(), trusted_url_hosts.end(), authority) != trusted_url_hosts.end();
+  }
+  if (icon_path.empty()) {
+    return false;
+  }
+
+  std::error_code ec;
+  auto base = std::filesystem::weakly_canonical(std::filesystem::path(base_local_path), ec);
+  if (ec || base.empty()) {
+    return false;
+  }
+  if (!base.has_filename()) { // trailing slash, ex: /etc/wolf/
+    base = base.parent_path();
+  }
+  // Same resolution as get_icon(): absolute paths as-is, anything else relative to the base folder
+  auto requested = icon_path.starts_with("/") ? std::filesystem::path(icon_path) : base / icon_path;
+  auto resolved = std::filesystem::weakly_canonical(requested, ec);
+  if (ec) {
+    return false;
+  }
+  // resolved must be strictly inside base (`..` and symlinks have been resolved above)
+  auto [base_end, _] = std::mismatch(base.begin(), base.end(), resolved.begin(), resolved.end());
+  return base_end == base.end() && resolved != base;
 }
 
 } // namespace utils

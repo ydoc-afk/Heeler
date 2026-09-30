@@ -3,6 +3,7 @@
 
 using Catch::Matchers::Equals;
 
+#include <control/input_handler.hpp>
 #include <moonlight/control.hpp>
 using namespace moonlight::control;
 
@@ -88,4 +89,37 @@ TEST_CASE("control joypad input packets") {
   REQUIRE(input_data->type == pkts::CONTROLLER_MULTI);
   REQUIRE(input_data->active_gamepad_mask == 1);
   REQUIRE(pressed_btns & pkts::CONTROLLER_BTN::A);
+}
+TEST_CASE("Sanitize untrusted input packets", "[CONTROL]") {
+  using namespace moonlight::control::pkts;
+
+  // Shorter than the INPUT_PKT header
+  REQUIRE(!control::sanitize_input_packet(std::string(sizeof(INPUT_PKT) - 1, '\0')));
+
+  // A bare header is accepted and padded with zeroes up to the biggest packet
+  INPUT_PKT header{.packet_type = 0x0206, .packet_len = 0, .data_size = 0, .type = MOUSE_MOVE_REL};
+  auto sanitized = control::sanitize_input_packet({reinterpret_cast<char *>(&header), sizeof(header)});
+  REQUIRE(sanitized);
+  REQUIRE(sanitized->packet()->type == MOUSE_MOVE_REL);
+  auto move = static_cast<MOUSE_MOVE_REL_PACKET *>(sanitized->packet());
+  REQUIRE(move->delta_x == 0);
+  REQUIRE(move->delta_y == 0);
+
+  // Overlong packets are truncated, not rejected
+  REQUIRE(control::sanitize_input_packet(std::string(control::MAX_INPUT_PACKET_SIZE + 100, '\0')));
+
+  SECTION("UTF8_TEXT declared size must match what was sent") {
+    UTF8_TEXT_PACKET text{};
+    text.type = UTF8_TEXT;
+    text.text[0] = 'a';
+    auto header_size = sizeof(INPUT_PKT::packet_type) + 2;
+    auto with_data_size = [&](std::size_t data_size, std::size_t sent_text) {
+      text.data_size = boost::endian::native_to_big(static_cast<unsigned int>(data_size));
+      return control::sanitize_input_packet({reinterpret_cast<char *>(&text), sizeof(INPUT_PKT) + sent_text});
+    };
+    REQUIRE(with_data_size(header_size + 1, 1));                          // 1 char, 1 char sent
+    REQUIRE(!with_data_size(header_size - 1, 1));                         // would underflow
+    REQUIRE(!with_data_size(header_size + 4, 1));                         // claims more than was sent
+    REQUIRE(!with_data_size(header_size + UTF8_TEXT_MAX_LEN + 1, UTF8_TEXT_MAX_LEN)); // bigger than the text buffer
+  }
 }
