@@ -2,6 +2,7 @@
 
 #define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
 #define BOOST_THREAD_PROVIDES_FUTURE
+#include <atomic>
 #include <boost/thread.hpp>
 #include <boost/thread/future.hpp>
 #include <core/audio.hpp>
@@ -455,8 +456,22 @@ struct StreamSession {
 
   std::shared_ptr<immer::atom<JoypadList>> joypads = std::make_shared<immer::atom<JoypadList>>();
 
+  /**
+   * Bitmask (KEYBOARD_MODIFIERS) of the modifier keys the client is currently physically holding.
+   * Used to avoid synthesizing a virtual press/release around keys the client already holds down.
+   */
+  std::shared_ptr<immer::atom<char>> held_modifiers = std::make_shared<immer::atom<char>>();
+
   std::shared_ptr<std::optional<input::PenTablet>> pen_tablet =
       std::make_shared<std::optional<input::PenTablet>>(); /* Optional, will be set on first use */
+
+  /**
+   * Sequence counter for the AES-GCM IV of outgoing encrypted control packets.
+   * GCM must never reuse an (key, IV) pair, so every outgoing control packet
+   * advances this counter (see control::encrypt_and_send). Shared (not copied)
+   * so all copies of this session and its input callbacks use the same sequence.
+   */
+  std::shared_ptr<std::atomic<std::uint32_t>> control_seq = std::make_shared<std::atomic<std::uint32_t>>(0);
 };
 
 } // namespace wolf::core::events

@@ -158,6 +158,10 @@ public:
           }
           self->deadline_.cancel(); // stop the deadline
           std::string raw_msg = {std::istreambuf_iterator<char>(&self->streambuf_), {}};
+          // Consume the buffer so that the next read (multi-chunk messages) only contains the
+          // new bytes; otherwise the previous chunk would be read again and duplicated in
+          // full_raw_msg while the tail of the real message gets truncated by the resize below.
+          self->streambuf_.consume(self->streambuf_.size());
           logs::log(logs::trace, "[RTSP] received message {} bytes \n{}", bytes_transferred, raw_msg);
 
           auto full_raw_msg = self->prev_read_ + raw_msg;
@@ -171,8 +175,41 @@ public:
           if (content_length_pos != std::string::npos) {
             content_length_pos += 16; //"Content-length: "sv.size();
             auto content_lenght_end = full_raw_msg.find("\r\n", content_length_pos);
+            if (content_lenght_end == std::string::npos) {
+              // Lenient clients (e.g. some Moonlight builds) use bare \n line endings
+              content_lenght_end = full_raw_msg.find("\n", content_length_pos);
+            }
+            if (content_lenght_end == std::string::npos) {
+              // The Content-length header is split across reads, keep accumulating
+              self->prev_read_ = full_raw_msg;
+              self->prev_read_bytes_ += bytes_transferred;
+              return self->receive_message(on_msg_read);
+            }
             auto total_length_str = full_raw_msg.substr(content_length_pos, content_lenght_end - content_length_pos);
-            auto total_length = std::stoi(total_length_str) + content_lenght_end + 2; // 2 for the \r\n
+            // The body starts right after the header block (\r\n\r\n, or \n\n for lenient clients);
+            // locating it explicitly avoids truncating the last bytes of the payload when the
+            // message arrives in multiple reads.
+            auto header_end = full_raw_msg.find("\r\n\r\n", content_lenght_end);
+            auto header_sep_size = 4;
+            if (header_end == std::string::npos) {
+              header_end = full_raw_msg.find("\n\n", content_lenght_end);
+              header_sep_size = 2;
+            }
+            if (header_end == std::string::npos) {
+              // Header block not complete yet, keep accumulating
+              self->prev_read_ = full_raw_msg;
+              self->prev_read_bytes_ += bytes_transferred;
+              return self->receive_message(on_msg_read);
+            }
+            int total_length = 0;
+            try {
+              total_length = std::stoi(total_length_str) + header_end + header_sep_size;
+            } catch (const std::exception &) {
+              logs::log(logs::warning, "[RTSP] malformed Content-length header: '{}'", total_length_str);
+              self->prev_read_ = "";
+              self->prev_read_bytes_ = 0;
+              return on_msg_read(std::nullopt);
+            }
             if (total_bytes_transferred < total_length) {
               self->prev_read_ = full_raw_msg;
               self->prev_read_bytes_ += bytes_transferred;
