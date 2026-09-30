@@ -769,3 +769,16 @@ TEST_CASE("Stream is stopped when the client never sends the RTP ping", "[Moonli
 
   stop_handler.unregister();
 }
+
+TEST_CASE("Ports can be overridden by env vars", "[LocalState]") {
+  REQUIRE(state::get_port(state::HTTP_PORT) == state::HTTP_PORT);
+
+  setenv("HEALER_HTTP_PORT", "12345", 1);
+  REQUIRE(state::get_port(state::HTTP_PORT) == 12345);
+
+  // A typo must not throw (this runs at startup): fall back to the default
+  setenv("HEALER_HTTP_PORT", "not-a-port", 1);
+  REQUIRE(state::get_port(state::HTTP_PORT) == state::HTTP_PORT);
+
+  unsetenv("HEALER_HTTP_PORT");
+}

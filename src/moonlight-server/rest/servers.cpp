@@ -201,10 +201,9 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
         });
       });
 
-  // Start server
+  // Start server (blocks until stopped, so the PairSignal handler above
+  // stays registered for the lifetime of the server)
   server->start([](unsigned short port) { logs::log(logs::info, "HTTP server listening on port: {} ", port); });
-
-  pair_handler.unregister();
 }
 
 std::optional<state::PairedClient>

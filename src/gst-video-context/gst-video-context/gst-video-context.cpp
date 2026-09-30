@@ -176,9 +176,18 @@ bool set_context(gst_context_ptr context, GstMessage *msg) {
 }
 
 cuda_context_ptr create_cuda_context(const std::string &device_path) {
-  auto device_id = getCudaDeviceFromDri(device_path).value_or(0);
-  logs::log(logs::info, "Creating CUDA context for device {} (detected CUDA device ID: {})", device_path, device_id);
-  auto cuda_ctx = gst_cuda_context_new(device_id);
+  auto device_id = getCudaDeviceFromDri(device_path);
+  if (!device_id) {
+    // Falling back to device 0 is correct on single-GPU systems, but on
+    // multi-GPU setups this silently encodes on the wrong GPU: make it loud
+    logs::log(logs::warning,
+              "Unable to map {} to a CUDA device, falling back to device 0. "
+              "On multi-GPU systems check WOLF_ENCODER_NODE / the driver installation.",
+              device_path);
+    device_id = 0;
+  }
+  logs::log(logs::info, "Creating CUDA context for device {} (detected CUDA device ID: {})", device_path, *device_id);
+  auto cuda_ctx = gst_cuda_context_new(*device_id);
   if (cuda_ctx) {
     return std::shared_ptr<GstCudaContext>(cuda_ctx, gst_object_unref);
   }
