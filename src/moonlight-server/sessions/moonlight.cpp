@@ -1,7 +1,9 @@
 #include <atomic>
+#include <chrono>
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <immer/vector_transient.hpp>
+#include <optional>
 #include <sessions/common.hpp>
 #include <sessions/handlers.hpp>
 #include <state/sessions.hpp>
@@ -14,10 +16,13 @@ using session_devices = immer::map<std::string /* session_id */, std::shared_ptr
 /**
  * Will stop the execution until an event of type RTPPingType is triggered
  * and the signature is matching the input `sess`.
- * Returns the RTPPingType event
+ * Returns the RTPPingType event, or nullopt if no matching ping is received
+ * within `timeout` (in which case a StopStreamEvent is fired so the session
+ * is cleaned up and this thread + its event handler don't leak)
  */
 template <typename RTPPingType>
-immer::box<RTPPingType> wait_for_ping(std::shared_ptr<events::EventBusType> ev_bus, const auto &sess) {
+std::optional<immer::box<RTPPingType>>
+wait_for_ping(std::shared_ptr<events::EventBusType> ev_bus, const auto &sess, std::chrono::milliseconds timeout) {
   auto ping_promise = std::make_shared<std::promise<RTPPingType>>();
   auto ping_future = ping_promise->get_future();
   auto resolved = std::make_shared<std::atomic_bool>(false);
@@ -36,7 +41,18 @@ immer::box<RTPPingType> wait_for_ping(std::shared_ptr<events::EventBusType> ev_b
         }
       });
 
-  // Wait for the promise to be fulfilled
+  // Wait for the promise to be fulfilled (bounded: a client that never pings
+  // must not leave this thread and the handler registered forever)
+  if (ping_future.wait_for(timeout) != std::future_status::ready) {
+    handler.unregister();
+    logs::log(logs::warning,
+              "No RTP ping received for session {} within {} ms, stopping the stream",
+              sess->session_id,
+              timeout.count());
+    ev_bus->fire_event(immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = sess->session_id}));
+    return std::nullopt;
+  }
+
   auto ping_ev = ping_future.get();
 
   // Unregister the handler since we only need it once
@@ -44,6 +60,9 @@ immer::box<RTPPingType> wait_for_ping(std::shared_ptr<events::EventBusType> ev_b
 
   return ping_ev;
 }
+
+// Fallback used when the session doesn't carry its own timeout
+inline constexpr int DEFAULT_PING_TIMEOUT_MS = 30000;
 
 immer::vector<immer::box<events::EventBusHandlers>>
 setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
@@ -239,15 +258,18 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
        gst_context = app_state->gst_context](const immer::box<events::VideoSession> &sess) {
         // Start a thread that will wait for the RTP ping event
         std::thread([sess, ev_bus, gst_context]() {
-          auto ping_ev = wait_for_ping<events::RTPVideoPingEvent>(ev_bus, sess);
+          auto timeout = std::chrono::milliseconds(sess->timeout_ms > 0 ? sess->timeout_ms : DEFAULT_PING_TIMEOUT_MS);
+          auto ping_ev = wait_for_ping<events::RTPVideoPingEvent>(ev_bus, sess, timeout);
+          if (!ping_ev)
+            return;
 
           // Start streaming
           streaming::start_streaming_video(sess,
                                            ev_bus,
-                                           ping_ev->client_ip,
-                                           ping_ev->client_port,
+                                           (*ping_ev)->client_ip,
+                                           (*ping_ev)->client_port,
                                            gst_context,
-                                           ping_ev->video_socket.get());
+                                           (*ping_ev)->video_socket.get());
         }).detach();
       }));
 
@@ -255,7 +277,11 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
       [ev_bus = app_state->event_bus, audio_server](const immer::box<events::AudioSession> &sess) {
         // Start a thread that will wait for the RTP ping event
         std::thread([sess, ev_bus, audio_server]() {
-          auto ping_ev = wait_for_ping<events::RTPAudioPingEvent>(ev_bus, sess);
+          auto ping_ev = wait_for_ping<events::RTPAudioPingEvent>(ev_bus,
+                                                                  sess,
+                                                                  std::chrono::milliseconds(DEFAULT_PING_TIMEOUT_MS));
+          if (!ping_ev)
+            return;
 
           // Start streaming
           auto audio_server_name = audio_server ? audio::get_server_name(audio_server->server)
@@ -265,9 +291,9 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
 
           streaming::start_streaming_audio(sess,
                                            ev_bus,
-                                           ping_ev->client_ip,
-                                           ping_ev->client_port,
-                                           ping_ev->audio_socket.get(),
+                                           (*ping_ev)->client_ip,
+                                           (*ping_ev)->client_port,
+                                           (*ping_ev)->audio_socket.get(),
                                            sink_name,
                                            server_name);
         }).detach();

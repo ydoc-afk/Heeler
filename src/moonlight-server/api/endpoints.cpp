@@ -10,7 +10,11 @@ namespace wolf::api {
 
 void UnixSocketServer::endpoint_Events(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   // curl -N --unix-socket /tmp/wolf.sock http://localhost/api/v1/events
-  state_->sockets.push_back(socket);
+  {
+    // Runs on the request thread pool while the io thread iterates/erases the vector
+    std::lock_guard lock(state_->sockets_mutex);
+    state_->sockets.push_back(socket);
+  }
   send_http(socket,
             200,
             {{"Content-Type: text/event-stream"}, {"Connection: keep-alive"}, {"Cache-Control: no-cache"}},
@@ -232,6 +236,11 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
         return;
       }
       immer::vector<immer::box<events::App>> apps = moonlight_profile.value()->apps->load();
+      if (apps.empty()) {
+        logs::log(logs::warning, "[API] No apps in the moonlight profile, unable to automatically create an app.");
+        send_http(socket, 400, rfl::json::write(GenericErrorResponse{.error = "No apps configured"}));
+        return;
+      }
       immer::box<events::App> sample_app = apps.front();
       choosen_app = events::App{
           .base = {.title = "dummy", .id = state::gen_uuid(), .support_hdr = false, .icon_png_path = ""},
@@ -379,9 +388,13 @@ void UnixSocketServer::endpoint_StreamSessionHandleInput(const HTTPRequest &req,
     auto session_id = std::stoul(input_request.value().session_id);
     if (auto session = state::get_session_by_id(sessions.get(), session_id)) {
       auto hex_pkt = input_request.value().input_packet_hex.get();
-      auto pkt_parsed = crypto::hex_to_str(hex_pkt);
-      control::INPUT_PKT *input_pkt = reinterpret_cast<control::INPUT_PKT *>(pkt_parsed.data());
-      control::handle_input(session.value(), {}, input_pkt);
+      auto input_pkt = control::sanitize_input_packet(crypto::hex_to_str(hex_pkt));
+      if (!input_pkt) {
+        logs::log(logs::warning, "[API] Malformed input packet: {}", hex_pkt);
+        send_http(socket, 400, rfl::json::write(GenericErrorResponse{.error = "Malformed input packet"}));
+        return;
+      }
+      control::handle_input(session.value(), {}, input_pkt->packet());
 
       send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
     } else {
@@ -593,6 +606,36 @@ void UnixSocketServer::endpoint_GetIcon(const HTTPRequest &req, std::shared_ptr<
     send_http(socket, 400, rfl::json::write(res));
     return;
   }
+  // Only serve icons that are configured or live in the state folder: this must not be a generic file/URL fetcher
+  std::vector<std::string> configured_icons;
+  for (const auto &profile : state_->app_state->config->profiles->load().get()) {
+    configured_icons.push_back(profile->icon_png_path);
+    for (const auto &app : profile->apps->load().get()) {
+      if (app->base.icon_png_path) {
+        configured_icons.push_back(*app->base.icon_png_path);
+      }
+    }
+  }
+  if (state_->app_state->lobbies) {
+    for (const auto &lobby : state_->app_state->lobbies->load().get()) {
+      if (lobby.icon_png_path) {
+        configured_icons.push_back(*lobby.icon_png_path);
+      }
+    }
+  }
+  auto trusted_hosts = utils::DEFAULT_ICON_URL_HOSTS;
+  for (auto host : utils::split(utils::get_env("HEALER_ICON_URL_HOSTS", ""), ',')) {
+    if (!host.empty()) {
+      trusted_hosts.emplace_back(host);
+    }
+  }
+  auto base_folder = state_->app_state->host->local_base_state_folder;
+  if (!utils::is_icon_allowed(icon_path[1], base_folder, configured_icons, trusted_hosts)) {
+    logs::log(logs::warning, "[API] Refusing to serve icon outside the config/state folder: {}", icon_path[1]);
+    send_http(socket, 403, rfl::json::write(GenericErrorResponse{.error = "Icon not allowed"}));
+    return;
+  }
+
   // TODO: implement coroutines for CURL
   std::thread([this, socket, icon_path = utils::to_string(icon_path[1])]() {
     if (auto icon = utils::get_icon(this->state_->app_state->host->local_base_state_folder, icon_path)) {

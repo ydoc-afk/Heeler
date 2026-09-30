@@ -163,6 +163,10 @@ std::string aes_decrypt_gcm(std::string_view msg,
 
 std::string sign(std::string_view msg, std::string_view private_key) {
   auto p_key = signature::create_key(private_key, true);
+  if (!p_key) {
+    // create_key() already logged the PEM parsing failure
+    return {};
+  }
   return signature::sign(msg, p_key.get(), EVP_sha256());
 }
 

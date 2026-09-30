@@ -224,12 +224,17 @@ void run() {
     try {
       mdns_cpp::Logger::setLoggerSink([](const std::string &msg) {
         // msg here will include a /n at the end, so we remove it
-        logs::log(logs::trace, "mDNS: {}", msg.substr(0, msg.size() - 1));
+        auto trimmed = msg;
+        while (!trimmed.empty() && (trimmed.back() == '\n' || trimmed.back() == '\r'))
+          trimmed.pop_back();
+        if (!trimmed.empty())
+          logs::log(logs::trace, "mDNS: {}", trimmed);
       });
       mdns_cpp::mDNS mdns;
       mdns.setServiceName("_nvstream._tcp.local.");
       mdns.setServiceHostname(hostname);
-      mdns.setServicePort(state::HTTP_PORT);
+      // Respect WOLF_HTTP_PORT like every other server does
+      mdns.setServicePort(state::get_port(state::HTTP_PORT));
       mdns.startService(false);
     } catch (const std::exception &e) {
       logs::log(logs::error, "mDNS error: {}", e.what());
@@ -238,7 +243,15 @@ void run() {
 
   auto audio_server = setup_audio_server(local_state->host->host_xdg_runtime_dir, runtime_dir);
   // PulseAudio sink-input router (hostname -> session_id -> virtual_sink_<session>)
-  auto pulse_router_state = std::make_shared<audio::PulseAudioRouterState>(audio_server->server);
+  // setup_audio_server() returns nullopt when no PulseAudio server is available (no
+  // PULSE_SERVER and the sidecar container failed to start); streaming can still run
+  // without audio, so degrade gracefully instead of dereferencing the optional.
+  std::shared_ptr<audio::PulseAudioRouterState> pulse_router_state;
+  if (audio_server && audio_server->server) {
+    pulse_router_state = std::make_shared<audio::PulseAudioRouterState>(audio_server->server);
+  } else {
+    logs::log(logs::warning, "No PulseAudio server available, sessions will start without audio");
+  }
   auto pulse_router_handlers = audio::setup_pulseaudio_router_handlers(local_state, pulse_router_state);
   // Setup event handlers for Moonlight related events (Start/Stop stream, hotplug, etc)
   auto moonlight_sess_handlers = sessions::setup_moonlight_handlers(local_state, runtime_dir, audio_server);

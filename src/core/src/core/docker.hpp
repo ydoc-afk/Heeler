@@ -62,6 +62,19 @@ struct Container {
 void init();
 
 /**
+ * Extracts the error message from a line of the image pull progress stream, if the line reports one.
+ * Docker reports failures as `{"error": "<message>", "errorDetail": {"message": "<message>"}}`
+ */
+std::optional<std::string> parse_pull_error(std::string_view progress_line);
+
+/**
+ * Adds the default `:latest` tag to an image reference that has neither a tag nor a digest, like the Docker CLI does.
+ * Without it the Engine API pulls *every* tag of the image.
+ * (ex: `hello-world` -> `hello-world:latest`, `localhost:5000/app` -> `localhost:5000/app:latest`)
+ */
+std::string with_default_tag(std::string_view image);
+
+/**
  * Container engines do not all use the same status code for name conflicts.
  */
 bool is_container_name_conflict_response(long status_code, std::string_view response_body);

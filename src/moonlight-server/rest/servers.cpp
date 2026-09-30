@@ -2,7 +2,9 @@
 #include <events/events.hpp>
 #include <immer/atom.hpp>
 #include <immer/map_transient.hpp>
+#include <netdb.h>
 #include <rest/endpoints.hpp>
+#include <rest/pairing_key.hpp>
 
 namespace HTTPServers {
 
@@ -16,6 +18,49 @@ constexpr char const *pin_html =
 
 namespace bt = boost::property_tree;
 using namespace wolf::core;
+
+/**
+ * Best-effort reverse DNS lookup for a client IP, so the PIN page can show e.g. "steamdeck"
+ * instead of a bare IP. Returns an empty string when the IP can't be resolved
+ * (common on LANs without PTR records), the page then falls back to the IP.
+ */
+std::string get_hostname(const std::string &ip) {
+  struct addrinfo hints {};
+  struct addrinfo *result = nullptr;
+  hints.ai_family = AF_INET;
+  hints.ai_flags = AI_CANONNAME;
+  if (getaddrinfo(ip.c_str(), nullptr, &hints, &result) != 0 || result == nullptr) {
+    return {};
+  }
+  std::string hostname = result->ai_canonname;
+  freeaddrinfo(result);
+  return hostname;
+}
+
+/**
+ * Escapes a string so that it can be embedded in a JSON string literal
+ * (hostnames come from reverse DNS, so they aren't under our control)
+ */
+std::string json_escape(std::string_view in) {
+  std::string out;
+  for (char c : in) {
+    switch (c) {
+    case '"':
+      out += "\\\"";
+      break;
+    case '\\':
+      out += "\\\\";
+      break;
+    default:
+      if (static_cast<unsigned char>(c) < 0x20) {
+        out += fmt::format("\\u{:04x}", static_cast<int>(static_cast<unsigned char>(c)));
+      } else {
+        out += c;
+      }
+    }
+  }
+  return out;
+}
 
 /**
  * @brief Start the generic server on the specified port
@@ -55,15 +100,82 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     }
   };
 
+  // Lists the pending pair requests, so the PIN page (and any other client) can
+  // discover them without reading the server log for the one-shot /pin/#<secret> URL.
+  // The list hands out the secrets needed to submit a PIN, so it requires the preset HEALER_PAIRING_KEY
+  std::string expected_key = utils::get_env("HEALER_PAIRING_KEY", "");
+  if (expected_key.empty()) {
+    logs::log(logs::info, "PIN landing page disabled, set HEALER_PAIRING_KEY to enable it at /pin/");
+  }
+  auto key_attempts = std::make_shared<immer::atom<pairing_key::AttemptsMap>>();
+  server->resource["^/pin/pending$"]["GET"] = [pairing_atom, expected_key, key_attempts](auto resp, auto req) {
+    SimpleWeb::CaseInsensitiveMultimap headers;
+    headers.emplace("Content-Type", "application/json");
+    if (expected_key.empty()) {
+      resp->write(SimpleWeb::StatusCode::client_error_forbidden, R"({"error":"disabled"})", headers);
+      return;
+    }
+
+    auto client_ip = req->remote_endpoint().address().to_string();
+    auto provided = get_header(req->header, "X-Pairing-Key").value_or("");
+    if (provided.empty()) { // Not a guess: the page asks for the key, doesn't count towards the lockout
+      resp->write(SimpleWeb::StatusCode::client_error_unauthorized, R"({"error":"key_required"})", headers);
+      return;
+    }
+    auto result = pairing_key::Result::WRONG_KEY;
+    key_attempts->update([&](const pairing_key::AttemptsMap &attempts) {
+      auto [check_result, updated] =
+          pairing_key::check(attempts, client_ip, provided, expected_key, pairing_key::clock::now());
+      result = check_result;
+      return updated;
+    });
+    if (result == pairing_key::Result::LOCKED_OUT) {
+      logs::log(logs::warning, "[PIN] Too many wrong pairing keys from {}, locked out", client_ip);
+      resp->write(SimpleWeb::StatusCode::client_error_too_many_requests, R"({"error":"locked_out"})", headers);
+      return;
+    } else if (result == pairing_key::Result::WRONG_KEY) {
+      logs::log(logs::warning, "[PIN] Wrong pairing key from {}", client_ip);
+      resp->write(SimpleWeb::StatusCode::client_error_unauthorized, R"({"error":"wrong_key"})", headers);
+      return;
+    }
+
+    std::string body = R"({"requests":[)";
+    bool first = true;
+    for (const auto &[secret, pair_request] : *pairing_atom->load()) {
+      if (!first) {
+        body += ',';
+      }
+      first = false;
+      body += R"({"secret":")" + json_escape(secret) + R"(","client_ip":")" + json_escape(pair_request->client_ip) +
+              R"(","hostname":")" + json_escape(get_hostname(pair_request->client_ip)) + R"("})";
+    }
+    body += "]}";
+    resp->write(SimpleWeb::StatusCode::success_ok, body, headers);
+  };
+
   server->resource["^/unpair$"]["GET"] = [&state](auto resp, auto req) {
     SimpleWeb::CaseInsensitiveMultimap headers = req->parse_query_string();
     auto client_id = get_header(headers, "uniqueid");
     auto client_ip = req->remote_endpoint().address().to_string();
+
+    // This endpoint is unauthenticated, so validate the input and answer with 400
+    // instead of throwing out of the handler (which would terminate the process)
+    if (!client_id.has_value()) {
+      logs::log(logs::warning, "[HTTP] /unpair request without a 'uniqueid' parameter from {}", client_ip);
+      endpoints::server_error<SimpleWeb::HTTP>(resp);
+      return;
+    }
     auto cache_key = client_id.value() + "@" + client_ip;
 
     logs::log(logs::info, "Unpairing: {}", cache_key);
-    auto client = state->pairing_cache->load()->at(cache_key);
-    state::unpair(state->config, state::PairedClient{.client_cert = client.client_cert});
+    auto cache = state->pairing_cache->load().get();
+    auto cached_client = cache.find(cache_key);
+    if (!cached_client) {
+      logs::log(logs::warning, "[HTTP] /unpair request for unknown client: {}", cache_key);
+      endpoints::server_error<SimpleWeb::HTTP>(resp);
+      return;
+    }
+    state::unpair(state->config, state::PairedClient{.client_cert = cached_client->client_cert});
 
     XML xml;
     xml.put("root.<xmlattr>.status_code", 200);
@@ -89,10 +201,9 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
         });
       });
 
-  // Start server
+  // Start server (blocks until stopped, so the PairSignal handler above
+  // stays registered for the lifetime of the server)
   server->start([](unsigned short port) { logs::log(logs::info, "HTTP server listening on port: {} ", port); });
-
-  pair_handler.unregister();
 }
 
 std::optional<state::PairedClient>
