@@ -79,6 +79,20 @@ std::string with_default_tag(std::string_view image);
  */
 bool is_container_name_conflict_response(long status_code, std::string_view response_body);
 
+struct DockerEndpoint {
+  /* Base URL for the Engine API requests, ex: http://localhost or http://docker-proxy:2375 */
+  std::string base_url;
+  /* Set when the engine is reached through a unix socket */
+  std::optional<std::string> unix_socket;
+};
+
+/**
+ * Parses the docker engine location, accepts:
+ *  - a unix socket path: `/var/run/docker.sock` or `unix:///var/run/docker.sock`
+ *  - a plain HTTP TCP endpoint: `tcp://docker-proxy:2375` or `http://docker-proxy:2375`
+ */
+DockerEndpoint parse_docker_endpoint(std::string_view socket);
+
 /**
  * The registry an image reference is pulled from, `docker.io` for Docker Hub images
  * (ex: `ghcr.io/games-on-whales/steam:edge` -> `ghcr.io`, `ubuntu:24.04` -> `docker.io`)
@@ -102,6 +116,7 @@ private:
 
 public:
   /**
+   * @param socket_path: see parse_docker_endpoint() for the accepted formats
    * @param docker_config_path: optional, path to a Docker CLI `config.json` used to authenticate image pulls
    *                            when no explicit registry_auth is passed
    */

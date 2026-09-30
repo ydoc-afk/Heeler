@@ -129,6 +129,24 @@ TEST_CASE("Docker create detects container name conflicts", "[DOCKER]") {
   REQUIRE(!docker::is_container_name_conflict_response(404, R"({"message":"No such image"})"));
 }
 
+TEST_CASE("Docker endpoint parsing", "[DOCKER]") {
+  auto unix_path = docker::parse_docker_endpoint("/var/run/docker.sock");
+  REQUIRE(unix_path.base_url == "http://localhost");
+  REQUIRE(unix_path.unix_socket == "/var/run/docker.sock");
+
+  auto unix_url = docker::parse_docker_endpoint("unix:///run/podman/podman.sock");
+  REQUIRE(unix_url.base_url == "http://localhost");
+  REQUIRE(unix_url.unix_socket == "/run/podman/podman.sock");
+
+  auto tcp = docker::parse_docker_endpoint("tcp://docker-proxy:2375");
+  REQUIRE(tcp.base_url == "http://docker-proxy:2375");
+  REQUIRE(!tcp.unix_socket.has_value());
+
+  auto http = docker::parse_docker_endpoint("http://10.0.0.2:2375/");
+  REQUIRE(http.base_url == "http://10.0.0.2:2375");
+  REQUIRE(!http.unix_socket.has_value());
+}
+
 TEST_CASE("Docker registry auth from config.json", "[DOCKER]") {
   REQUIRE(docker::registry_from_image("ubuntu:24.04") == "docker.io");
   REQUIRE(docker::registry_from_image("library/ubuntu") == "docker.io");
