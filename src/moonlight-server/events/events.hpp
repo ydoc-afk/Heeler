@@ -71,6 +71,11 @@ struct App {
   std::string av1_gst_pipeline;
 
   std::string render_node;
+  /**
+   * The GPU that encodes the video (where the encoder's CUDA/VA context lives).
+   * Empty means the same as render_node.
+   */
+  std::string encoder_render_node;
 
   std::string opus_gst_pipeline;
   bool start_virtual_compositor;

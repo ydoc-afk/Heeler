@@ -838,3 +838,83 @@ TEST_CASE("Ports can be overridden by env vars", "[LocalState]") {
 
   unsetenv("HEALER_HTTP_PORT");
 }
+
+TEST_CASE("Per-app encoder GPU", "[LocalState]") {
+  auto default_node = std::string(utils::get_env("HEALER_ENCODER_NODE", "/dev/dri/renderD128"));
+  // Stand-in for a second GPU: another path to the default one. Without a GPU (CI) it's a dangling link.
+  auto gpu_alias = (std::filesystem::temp_directory_path() / "heeler-test-gpu-alias").string();
+  std::filesystem::remove(gpu_alias);
+  std::filesystem::create_symlink(default_node, gpu_alias);
+  bool has_gpu = std::filesystem::exists(gpu_alias);
+
+  // Extra apps in the moonlight profile (the first [[profiles]], so insert before the second one)
+  std::ifstream in("config.test.toml");
+  std::string toml((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  auto second_profile = toml.find("[[profiles]]", toml.find("[[profiles]]") + 1);
+  REQUIRE(second_profile != std::string::npos);
+  toml.insert(second_profile,
+              fmt::format(R"(
+[[profiles.apps]]
+title = "Own GPU"
+render_node = "{0}"
+[profiles.apps.runner]
+type = "process"
+run_cmd = "true"
+
+[[profiles.apps]]
+title = "Not a GPU"
+render_node = "/dev/null"
+[profiles.apps.runner]
+type = "process"
+run_cmd = "true"
+
+[[profiles.apps]]
+title = "Missing encoder GPU"
+render_node = "{0}"
+encoder_render_node = "/tmp/heeler-no-such-gpu"
+[profiles.apps.runner]
+type = "process"
+run_cmd = "true"
+
+[[profiles.apps]]
+title = "Encoder only"
+encoder_render_node = "{0}"
+[profiles.apps.runner]
+type = "process"
+run_cmd = "true"
+
+)",
+                          gpu_alias));
+  auto path = (std::filesystem::temp_directory_path() / "heeler-test-encoder-gpu.toml").string();
+  std::ofstream(path) << toml;
+
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto cfg = state::load_or_default(path, event_bus, running_sessions); // must not throw on /dev/null
+  std::filesystem::remove(path);
+  std::filesystem::remove(gpu_alias);
+  immer::vector<immer::box<events::App>> apps = state::get_moonlight_profile(cfg).value()->apps->load();
+  REQUIRE_THAT(apps, Catch::Matchers::SizeIs(6));
+
+  // Unchanged: apps without their own GPU encode on the default one
+  REQUIRE(apps.at(0)->encoder_render_node == default_node);
+  // A GPU that doesn't exist falls back to the default (instead of silently picking a software encoder)
+  REQUIRE(apps.at(1)->render_node == "/tmp/dead_beef");
+  REQUIRE(apps.at(1)->encoder_render_node == default_node);
+
+  // An app on its own GPU encodes there too
+  REQUIRE(apps.at(2)->render_node == gpu_alias);
+  REQUIRE(apps.at(2)->encoder_render_node == (has_gpu ? gpu_alias : default_node));
+  REQUIRE_THAT(apps.at(2)->h264_gst_pipeline, Equals("video_source !\ndefault !\nh264_pipeline !\nvideo_sink"));
+
+  // Something that isn't a GPU falls back to the default without taking the config down
+  REQUIRE(apps.at(3)->render_node == "/dev/null");
+  REQUIRE(apps.at(3)->encoder_render_node == default_node);
+
+  // An explicit encoder GPU that doesn't exist falls back to the default
+  REQUIRE(apps.at(4)->encoder_render_node == default_node);
+
+  // encoder_render_node alone
+  REQUIRE(apps.at(5)->render_node == std::string(utils::get_env("HEALER_RENDER_NODE", "/dev/dri/renderD128")));
+  REQUIRE(apps.at(5)->encoder_render_node == (has_gpu ? gpu_alias : default_node));
+}

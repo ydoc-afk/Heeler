@@ -265,6 +265,7 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
           .av1_gst_pipeline = sample_app->av1_gst_pipeline,
 
           .render_node = sample_app->render_node,
+          .encoder_render_node = sample_app->encoder_render_node,
           .opus_gst_pipeline = sample_app->opus_gst_pipeline,
           .start_virtual_compositor = true,
           .start_audio_server = true,
@@ -327,7 +328,8 @@ void UnixSocketServer::endpoint_StreamSessionStart(const HTTPRequest &req, std::
       auto video_session = start_req.value().video_session;
       video_session.session_id = session_id; // Can't be JSON encoded
       if (video_session.render_node.empty()) {
-        video_session.render_node = session->app->render_node;
+        video_session.render_node = session->app->encoder_render_node.empty() ? session->app->render_node
+                                                                              : session->app->encoder_render_node;
       }
       state_->app_state->event_bus->fire_event(immer::box<events::VideoSession>(video_session));
 
