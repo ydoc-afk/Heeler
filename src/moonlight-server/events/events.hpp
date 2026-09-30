@@ -2,8 +2,8 @@
 
 #define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
 #define BOOST_THREAD_PROVIDES_FUTURE
-#include <boost/thread.hpp>
 #include <atomic>
+#include <boost/thread.hpp>
 #include <boost/thread/future.hpp>
 #include <core/audio.hpp>
 #include <core/input.hpp>
