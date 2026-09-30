@@ -738,6 +738,15 @@ TEST_CASE("Utils APIs", "[API]") {
     REQUIRE(response);
     REQUIRE(response->first == 404);
   }
+
+  { // Arbitrary files and URLs must be refused (no local file read / SSRF through the API)
+    for (auto icon_path : {"/etc/passwd", "../../etc/passwd", "http://169.254.169.254/latest/meta-data/"}) {
+      auto response =
+          req(curl.get(), HTTPMethod::GET, fmt::format("http://localhost/api/v1/utils/get-icon?icon_path={}", icon_path));
+      REQUIRE(response);
+      REQUIRE(response->first == 403);
+    }
+  }
 }
 
 struct SSEEvent {
