@@ -65,6 +65,10 @@ The `WOLF_*` names are still accepted as deprecated aliases for backwards compat
 |$HOST_APPS_STATE_FOLDER/fake-udev
 |The path on the host for the fake-udev CLI tool
 
+|HEALER_FEC_PERCENTAGE
+|20
+|Percentage (0-100) of extra Forward Error Correction data sent with each video frame. Raise it on lossy links (e.g. Wi-Fi) so Moonlight can recover dropped packets; lower it to leave more of the bitrate for video. When the client reports its configured bitrate and FEC is 80 or lower, Heeler lowers the encoder bitrate so that video plus FEC stays within it.
+
 |HEALER_PAIRING_KEY
 |_(unset)_
 |Admin key for the PIN landing page (`http://<host>:47989/pin/`). When set, the page asks for it once (the browser remembers it) and then lists every device waiting to pair. When unset, the list is disabled and you have to use the one-shot link printed in the log. Pick a long random value: the page is served over plain HTTP, so only use it on a network you trust.
