@@ -531,7 +531,21 @@ There are two main separated parts that make use of HW acceleration in Heeler:
 * *Gstreamer video encoding*: this will use HW acceleration in order to efficiently encode the video stream with H.264 or HEVC.
 
 Since Heeler supports HW accelerated zero-copy pipelines it's best to keep both the Wayland rendering and the Gstreamer encoding on the same GPU.
-Support for multi-GPU load balancing is planned for future releases.
+
+`HEALER_RENDER_NODE` and `HEALER_ENCODER_NODE` set the defaults, and each app can override them in `config.toml`:
+
+[source,toml]
+....
+[[profiles.apps]]
+title = "Steam on the second GPU"
+render_node = "/dev/dri/renderD129"          # <1>
+# encoder_render_node = "/dev/dri/renderD129" <2>
+....
+
+<1> The app runs, and its desktop is rendered, on this GPU. It is also *encoded* there: Heeler picks the encoders that work on that GPU (ex: NVENC on Nvidia, VA-API on Intel/AMD) and keeps the zero-copy pipeline when possible.
+<2> Optional: encode on a different GPU than the one rendering (frames are then copied between GPUs). Defaults to `render_node`, or to `HEALER_ENCODER_NODE` for apps without a `render_node`.
+
+If an app's GPU doesn't exist, isn't a GPU, or has no working H.264 encoder, Heeler logs a warning and encodes that app on the default GPU instead.
 
 [#_keyboard_layout]
 == Changing and Switching Keyboard Layouts in wolf Apps Containers

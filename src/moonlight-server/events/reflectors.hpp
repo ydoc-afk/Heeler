@@ -53,6 +53,7 @@ template <> struct Reflector<events::App> {
     std::string av1_gst_pipeline;
 
     std::string render_node;
+    std::optional<std::string> encoder_render_node;
 
     std::string opus_gst_pipeline;
     bool start_virtual_compositor;
@@ -69,6 +70,7 @@ template <> struct Reflector<events::App> {
             .hevc_gst_pipeline = v.hevc_gst_pipeline,
             .av1_gst_pipeline = v.av1_gst_pipeline,
             .render_node = v.render_node,
+            .encoder_render_node = v.encoder_render_node.empty() ? v.render_node : v.encoder_render_node,
             .opus_gst_pipeline = v.opus_gst_pipeline,
             .start_virtual_compositor = v.start_virtual_compositor,
             .start_audio_server = v.start_audio_server,
@@ -83,6 +85,7 @@ template <> struct Reflector<events::App> {
         .hevc_gst_pipeline = app.hevc_gst_pipeline,
         .av1_gst_pipeline = app.av1_gst_pipeline,
         .render_node = app.render_node,
+        .encoder_render_node = app.encoder_render_node.value_or(app.render_node),
         .opus_gst_pipeline = app.opus_gst_pipeline,
         .start_virtual_compositor = app.start_virtual_compositor,
         .start_audio_server = app.start_audio_server,

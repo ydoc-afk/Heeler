@@ -120,6 +120,8 @@ struct BaseApp {
   std::string title;
   std::optional<std::string> icon_png_path;
   std::optional<std::string> render_node;
+  /* The GPU used to encode the video, defaults to render_node (or HEALER_ENCODER_NODE when that isn't set) */
+  std::optional<std::string> encoder_render_node;
   std::optional<BaseAppVideoOverride> video;
   std::optional<BaseAppAudioOverride> audio;
   std::optional<bool> start_virtual_compositor;
