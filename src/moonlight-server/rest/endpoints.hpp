@@ -35,6 +35,19 @@ template <class T> void server_error(const std::shared_ptr<typename SimpleWeb::S
   send_xml<T>(response, SimpleWeb::StatusCode::client_error_bad_request, xml);
 }
 
+/**
+ * Replies to a failed /launch or /resume with a message that Moonlight shows to the user
+ */
+inline void launch_failed(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+                          int status_code,
+                          const std::string &message) {
+  logs::log(logs::warning, "[HTTPS] launch/resume failed: {}", message);
+  send_xml<SimpleWeb::HTTPS>(response,
+                             status_code == 404 ? SimpleWeb::StatusCode::client_error_not_found
+                                                : SimpleWeb::StatusCode::client_error_bad_request,
+                             moonlight::launch_error(status_code, message));
+}
+
 template <class T>
 void not_found(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &response,
                const std::shared_ptr<typename SimpleWeb::Server<T>::Request> &request) {
@@ -478,14 +491,12 @@ inline void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
   auto app_id = get_header(headers, "appid");
   if (!app_id) {
-    logs::log(logs::warning, "[HTTP] launch request missing appid");
-    server_error<SimpleWeb::HTTPS>(response);
+    launch_failed(response, 400, "The launch request didn't say which app to start (missing appid)");
     return;
   }
   auto app = state::get_moonlight_app_by_id(state->config, app_id.value());
   if (!app) {
-    logs::log(logs::warning, "[HTTP] Requested wrong app_id: not found");
-    server_error<SimpleWeb::HTTPS>(response);
+    launch_failed(response, 404, "This app doesn't exist on the host anymore, refresh the app list");
     return;
   }
 
@@ -500,7 +511,7 @@ inline void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
   auto new_session = create_run_session(request->parse_query_string(), client_ip, current_client, state, app.value());
   if (!new_session) {
-    server_error<SimpleWeb::HTTPS>(response);
+    launch_failed(response, 400, "The launch request is missing its encryption key (rikey/rikeyid)");
     return;
   }
   state->event_bus->fire_event(immer::box<events::StreamSession>(*new_session));
@@ -524,7 +535,7 @@ inline void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
     auto new_session =
         create_run_session(request->parse_query_string(), client_ip, current_client, state, *old_session->app);
     if (!new_session) {
-      server_error<SimpleWeb::HTTPS>(response);
+      launch_failed(response, 400, "The resume request is missing its encryption key (rikey/rikeyid)");
       return;
     }
     // Carry over the old session display handle
@@ -545,7 +556,7 @@ inline void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
     send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
   } else {
     logs::log(logs::warning, "[HTTPS] Received resume event from an unregistered session, ip: {}", client_ip);
-    server_error<SimpleWeb::HTTPS>(response);
+    launch_failed(response, 404, "There is no running session to resume, start the app again");
   }
 }
 
