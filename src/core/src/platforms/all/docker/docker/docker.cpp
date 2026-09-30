@@ -82,6 +82,16 @@ std::optional<std::string> parse_pull_error(std::string_view progress_line) {
   return json::serialize(*error);
 }
 
+std::string with_default_tag(std::string_view image) {
+  // Only the last path component can hold the tag: a colon before it is a registry port
+  auto name_start = image.rfind('/');
+  auto name = image.substr(name_start == std::string_view::npos ? 0 : name_start + 1);
+  if (image.find('@') != std::string_view::npos || name.find(':') != std::string_view::npos) {
+    return std::string(image);
+  }
+  return fmt::format("{}:latest", image);
+}
+
 using curl_ptr = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>;
 
 /**
@@ -347,7 +357,8 @@ bool DockerAPI::pull_image(std::string_view image_name,
                            std::string_view registry_auth,
                            const std::function<void(const DockerProgressEvent &)> &progress_fn) const {
   if (auto conn = docker_connect(socket_path)) {
-    auto api_url = fmt::format("http://localhost/{}/images/create?fromImage={}", docker_api_version, image_name);
+    auto api_url =
+        fmt::format("http://localhost/{}/images/create?fromImage={}", docker_api_version, with_default_tag(image_name));
 
     struct PullState {
       std::string buffer = {};

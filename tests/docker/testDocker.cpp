@@ -633,3 +633,13 @@ TEST_CASE("Docker pull progress errors", "[DOCKER]") {
   REQUIRE(!docker::parse_pull_error("not json"));
   REQUIRE(!docker::parse_pull_error(""));
 }
+
+TEST_CASE("Docker image default tag", "[DOCKER]") {
+  REQUIRE(docker::with_default_tag("hello-world") == "hello-world:latest");
+  REQUIRE(docker::with_default_tag("hello-world:linux") == "hello-world:linux");
+  REQUIRE(docker::with_default_tag("ghcr.io/games-on-whales/steam") == "ghcr.io/games-on-whales/steam:latest");
+  REQUIRE(docker::with_default_tag("ghcr.io/games-on-whales/steam:edge") == "ghcr.io/games-on-whales/steam:edge");
+  REQUIRE(docker::with_default_tag("localhost:5000/app") == "localhost:5000/app:latest");
+  REQUIRE(docker::with_default_tag("localhost:5000/app:1.0") == "localhost:5000/app:1.0");
+  REQUIRE(docker::with_default_tag("ubuntu@sha256:abc") == "ubuntu@sha256:abc");
+}
