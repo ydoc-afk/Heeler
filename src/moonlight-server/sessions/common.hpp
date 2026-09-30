@@ -3,11 +3,13 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <map>
 #include <string>
 #include <string_view>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <thread>
+#include <vector>
 
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
@@ -15,6 +17,27 @@
 namespace wolf::core::sessions {
 
 constexpr std::string_view VIRTUAL_SINK_PREFIX = "virtual_sink_";
+
+/**
+ * The /dev/input nodes of a virtual device that a Wayland compositor has to read directly:
+ * pen tablets, touchpads (ex: the DualSense one) and touch screens.
+ * Gamepads, keyboards etc. are left out: those are read by the apps in the container.
+ */
+inline std::vector<std::string>
+pointer_input_nodes(const std::vector<std::map<std::string, std::string>> &udev_events) {
+  std::vector<std::string> nodes;
+  for (const auto &event : udev_events) {
+    auto devname = event.find("DEVNAME");
+    if (devname == event.end() || !devname->second.starts_with("/dev/input/event")) {
+      continue;
+    }
+    if (event.contains("ID_INPUT_TABLET") || event.contains("ID_INPUT_TOUCHPAD") ||
+        event.contains("ID_INPUT_TOUCHSCREEN")) {
+      nodes.push_back(devname->second);
+    }
+  }
+  return nodes;
+}
 constexpr std::chrono::milliseconds DEFAULT_WAYLAND_SOCKET_WAIT_TIMEOUT = std::chrono::seconds(5);
 
 inline std::chrono::milliseconds get_wayland_socket_wait_timeout() {

@@ -8,6 +8,7 @@
 #include <helpers/utils.hpp>
 #include <boost/asio.hpp>
 #include <rest/pairing_webhook.hpp>
+#include <sessions/common.hpp>
 #include <state/utils.hpp>
 #include <thread>
 
@@ -141,4 +142,22 @@ TEST_CASE("Pairing webhook POSTs the payload", "[PAIRING]") {
 
   // An unreachable webhook is reported, not thrown
   REQUIRE(pairing_webhook::post("http://127.0.0.1:1/hook", payload) == 0);
+}
+
+TEST_CASE("pointer_input_nodes picks the nodes the compositor reads", "[utils]") {
+  std::vector<std::map<std::string, std::string>> pen = {
+      {{"DEVNAME", "/dev/input/event20"}, {"ID_INPUT_TABLET", "1"}},
+      {{"DEVNAME", "/dev/input/mouse5"}, {"ID_INPUT_TABLET", "1"}}, // legacy mousedev node: not for libinput
+  };
+  REQUIRE(wolf::core::sessions::pointer_input_nodes(pen) == std::vector<std::string>{"/dev/input/event20"});
+
+  std::vector<std::map<std::string, std::string>> dualsense = {
+      {{"DEVNAME", "/dev/input/event21"}, {"ID_INPUT_JOYSTICK", "1"}},
+      {{"DEVNAME", "/dev/input/event22"}, {"ID_INPUT_TOUCHPAD", "1"}},
+      {{"DEVNAME", "/dev/hidraw3"}},
+      {{"ID_INPUT_TOUCHSCREEN", "1"}}, // no DEVNAME
+  };
+  REQUIRE(wolf::core::sessions::pointer_input_nodes(dualsense) == std::vector<std::string>{"/dev/input/event22"});
+
+  REQUIRE(wolf::core::sessions::pointer_input_nodes({}).empty());
 }
