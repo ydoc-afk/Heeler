@@ -15,6 +15,7 @@ using Catch::Matchers::Equals;
 #include <moonlight/protocol.hpp>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
+#include <rest/pairing_key.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
 
@@ -596,4 +597,45 @@ TEST_CASE("HTTP /unpair input validation", "[HTTP]") {
   REQUIRE(missing_id == 400);
   REQUIRE(unknown_client == 400);
   REQUIRE(still_alive == 400);
+}
+
+TEST_CASE("Pairing key", "[PAIRING]") {
+  using namespace pairing_key;
+  auto now = clock::now();
+  AttemptsMap attempts;
+
+  REQUIRE(matches("correct horse", "correct horse"));
+  REQUIRE(!matches("correct hors", "correct horse"));
+  REQUIRE(!matches("", "correct horse"));
+
+  SECTION("Right key") {
+    auto [result, updated] = check(attempts, "10.0.0.2", "secret", "secret", now);
+    REQUIRE(result == Result::OK);
+    REQUIRE(updated.size() == 0);
+  }
+
+  SECTION("Lockout after too many wrong keys") {
+    for (int i = 0; i < MAX_FAILURES; i++) {
+      auto [result, updated] = check(attempts, "10.0.0.2", "guess", "secret", now);
+      REQUIRE(result == Result::WRONG_KEY);
+      attempts = updated;
+    }
+    // Even the right key is rejected while locked out
+    REQUIRE(check(attempts, "10.0.0.2", "secret", "secret", now + std::chrono::seconds(30)).first ==
+            Result::LOCKED_OUT);
+    // Other clients aren't affected
+    REQUIRE(check(attempts, "10.0.0.3", "secret", "secret", now).first == Result::OK);
+    // After the lockout expires the right key works again and clears the failures
+    auto [result, updated] = check(attempts, "10.0.0.2", "secret", "secret", now + LOCKOUT);
+    REQUIRE(result == Result::OK);
+    REQUIRE(!updated.find("10.0.0.2"));
+  }
+
+  SECTION("Failures outside the window start a new one") {
+    auto [first, after_first] = check(attempts, "10.0.0.2", "guess", "secret", now);
+    REQUIRE(first == Result::WRONG_KEY);
+    auto [second, after_second] = check(after_first, "10.0.0.2", "guess", "secret", now + LOCKOUT);
+    REQUIRE(second == Result::WRONG_KEY);
+    REQUIRE(after_second.find("10.0.0.2")->failures == 1);
+  }
 }

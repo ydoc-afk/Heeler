@@ -468,9 +468,8 @@ inline void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
     send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
   } else {
     logs::log(logs::warning, "[HTTPS] Received resume event from an unregistered session, ip: {}", client_ip);
+    server_error<SimpleWeb::HTTPS>(response);
   }
-
-  server_error<SimpleWeb::HTTPS>(response);
 }
 
 inline void cancel(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
