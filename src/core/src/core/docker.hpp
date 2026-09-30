@@ -66,12 +66,29 @@ void init();
  */
 bool is_container_name_conflict_response(long status_code, std::string_view response_body);
 
+struct DockerEndpoint {
+  /* Base URL for the Engine API requests, ex: http://localhost or http://docker-proxy:2375 */
+  std::string base_url;
+  /* Set when the engine is reached through a unix socket */
+  std::optional<std::string> unix_socket;
+};
+
+/**
+ * Parses the docker engine location, accepts:
+ *  - a unix socket path: `/var/run/docker.sock` or `unix:///var/run/docker.sock`
+ *  - a plain HTTP TCP endpoint: `tcp://docker-proxy:2375` or `http://docker-proxy:2375`
+ */
+DockerEndpoint parse_docker_endpoint(std::string_view socket);
+
 class DockerAPI {
 private:
   std::string socket_path; // TODO: add B64 registry_auth
   std::string docker_api_version;
 
 public:
+  /**
+   * @param socket_path: see parse_docker_endpoint() for the accepted formats
+   */
   explicit DockerAPI(std::string socket_path = "/var/run/docker.sock") : socket_path(std::move(socket_path)) {
     docker_api_version = get_api_version();
   }

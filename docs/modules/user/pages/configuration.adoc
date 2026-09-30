@@ -47,7 +47,7 @@ The `WOLF_*` names are still accepted as deprecated aliases for backwards compat
 
 |HEALER_DOCKER_SOCKET
 |/var/run/docker.sock
-|The full path to the docker socket, doesn't support tcp (yet)
+|Where to reach the Docker (or Podman) engine: a unix socket path (`/var/run/docker.sock`, `unix:///run/podman/podman.sock`) or a plain-HTTP TCP endpoint (`tcp://docker-proxy:2375`). TCP lets Heeler go through a socket proxy (e.g. https://github.com/Tecnativa/docker-socket-proxy[docker-socket-proxy]) instead of mounting the raw Docker socket. TLS (`2376`) is not supported.
 
 |NVIDIA_DRIVER_VOLUME_NAME
 |nvidia-driver-vol
