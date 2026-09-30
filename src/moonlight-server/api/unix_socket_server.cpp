@@ -27,6 +27,16 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
                     // TODO: json_schema = rfl::json::to_schema<EventsVariant>()
                     .handler = [this](auto req, auto socket) { endpoint_Events(req, socket); }});
 
+  state_->http.add(HTTPMethod::GET,
+                   "/api/v1/health",
+                   {
+                       .summary = "Server health",
+                       .description = "Returns 200 while Heeler is up, together with uptime and activity counters. "
+                                      "Useful for container healthchecks and monitoring.",
+                       .response_description = {{200, {.json_schema = rfl::json::to_schema<HealthResponse>()}}},
+                       .handler = [this](auto req, auto socket) { endpoint_Health(req, socket); },
+                   });
+
   /**
    * Pairing API
    */

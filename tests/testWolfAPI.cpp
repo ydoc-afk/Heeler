@@ -131,6 +131,18 @@ TEST_CASE("Pair APIs", "[API]") {
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true,\"requests\":[]}"));
 
+  // Health reports activity counters (the test config has one paired client, lobbies are not set here)
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/health");
+  REQUIRE(response);
+  REQUIRE(response->first == 200);
+  auto health = rfl::json::read<wolf::api::HealthResponse>(response->second).value();
+  REQUIRE(health.success);
+  REQUIRE(health.uptime_seconds.value() >= 0);
+  REQUIRE(health.paired_clients.value() == 1);
+  REQUIRE(health.pending_pair_requests.value() == 0);
+  REQUIRE(health.running_sessions.value() == 0);
+  REQUIRE(health.lobbies.value() == 0);
+
   // Checkout the list of paired clients (there will be one in the test config file)
   response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/clients");
   REQUIRE(response);
