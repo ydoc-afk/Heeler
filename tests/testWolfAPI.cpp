@@ -1,4 +1,5 @@
 #include <api/api.hpp>
+#include <boost/asio.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <curl/curl.h>
@@ -805,4 +806,66 @@ TEST_CASE("SSE APIs", "[API]") {
   REQUIRE(event.has_value());
   REQUIRE_THAT(event->event, Equals("wolf::core::events::IDRRequestEvent"));
   REQUIRE_THAT(event->data, Equals("{\"session_id\":\"42\"}"));
+}
+
+/**
+ * Send raw bytes to the API unix socket and return everything received back until the peer closes the connection
+ */
+static std::string raw_api_request(const std::string &socket_path, const std::string &raw) {
+  boost::asio::io_context ioc;
+  boost::asio::local::stream_protocol::socket sock(ioc);
+  sock.connect(boost::asio::local::stream_protocol::endpoint(socket_path));
+  boost::asio::write(sock, boost::asio::buffer(raw));
+
+  std::string reply;
+  boost::system::error_code ec;
+  char buf[1024];
+  while (auto n = sock.read_some(boost::asio::buffer(buf), ec)) {
+    reply.append(buf, n);
+  }
+  return reply;
+}
+
+TEST_CASE("API survives malformed requests", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = state::load_or_default("config.test.toml", event_bus, running_sessions);
+  config.config_source = "config.test.EDITED.toml"; // Avoid overriding the test config file
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = {config},
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = running_sessions});
+
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
+  server_thread.detach();
+  std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Wait for the server to start
+
+  auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+  curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 5L);
+
+  SECTION("A non numeric Content-Length is answered with a 400") {
+    auto reply = raw_api_request(socket_path,
+                                 "POST /api/v1/pair HTTP/1.0\r\nContent-Length: not-a-number\r\n\r\n{}");
+    REQUIRE_THAT(reply, ContainsSubstring("HTTP/1.0 400 Bad Request"));
+  }
+
+  SECTION("A handler that throws is answered with a 500") {
+    // session_id is parsed with std::stoul in the handler: a non numeric value throws on the request thread pool
+    StreamSessionStartRequest start_req{.session_id = "not-a-number"};
+    auto response =
+        req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/start", rfl::json::write(start_req));
+    REQUIRE(response);
+    REQUIRE(response->first == 500);
+  }
+
+  // Whatever happened above, the server must still be answering
+  auto response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/pair/pending");
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Equals("{\"success\":true,\"requests\":[]}"));
 }
