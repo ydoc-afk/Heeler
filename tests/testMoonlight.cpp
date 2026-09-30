@@ -20,6 +20,7 @@ using Catch::Matchers::Equals;
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
 #include <rest/pairing_key.hpp>
+#include <rest/preset_pin.hpp>
 #include <sessions/handlers.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
@@ -582,6 +583,14 @@ TEST_CASE("launch", "[MoonlightProtocol]") {
                                 "</root>");
 }
 
+TEST_CASE("launch error", "[MoonlightProtocol]") {
+  auto result = launch_error(404, "App not found");
+  REQUIRE(result.get<int>("root.<xmlattr>.status_code") == 404);
+  REQUIRE_THAT(result.get<std::string>("root.<xmlattr>.status_message"), Equals("App not found"));
+  REQUIRE(result.get<int>("root.gamesession") == 0);
+  REQUIRE(!result.get_optional<std::string>("root.sessionUrl0"));
+}
+
 TEST_CASE("Multiple users", "[HTTP]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto paired_clients = std::shared_ptr<immer::atom<state::PairedClientList>>();
@@ -917,4 +926,69 @@ run_cmd = "true"
   // encoder_render_node alone
   REQUIRE(apps.at(5)->render_node == std::string(utils::get_env("HEALER_RENDER_NODE", "/dev/dri/renderD128")));
   REQUIRE(apps.at(5)->encoder_render_node == (has_gpu ? gpu_alias : default_node));
+}
+
+TEST_CASE("Preset pairing PIN", "[PAIRING]") {
+  REQUIRE(preset_pin::parse("1234") == "1234");
+  REQUIRE(preset_pin::parse("0000") == "0000");
+  REQUIRE(!preset_pin::parse(nullptr));
+  REQUIRE(!preset_pin::parse(""));
+  REQUIRE(!preset_pin::parse("123"));
+  REQUIRE(!preset_pin::parse("12345"));
+  REQUIRE(!preset_pin::parse("12a4"));
+  REQUIRE(!preset_pin::parse(" 1234"));
+
+  using namespace preset_pin;
+  auto now = clock::now();
+  AttemptsMap attempts;
+  for (int i = 0; i < MAX_ATTEMPTS; i++) {
+    auto [allowed, updated] = allow(attempts, "10.0.0.2", now);
+    REQUIRE(allowed);
+    attempts = updated;
+  }
+  // Rate limited, other clients aren't affected
+  REQUIRE(!allow(attempts, "10.0.0.2", now + std::chrono::seconds(30)).first);
+  REQUIRE(allow(attempts, "10.0.0.3", now).first);
+  // A new window starts after WINDOW
+  auto [allowed_again, after] = allow(attempts, "10.0.0.2", now + WINDOW);
+  REQUIRE(allowed_again);
+  REQUIRE(after.find("10.0.0.2")->count == 1);
+}
+
+TEST_CASE("HTTP server answers pairing with the preset PIN", "[HTTP]") {
+  setenv("HEALER_PAIRING_PIN", "4321", 1);
+  auto app_state = immer::box<state::AppState>(
+      state::AppState{.pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+                      .pairing_atom = std::make_shared<
+                          immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+                      .event_bus = std::make_shared<events::EventBusType>()});
+
+  constexpr int port = 47791;
+  HttpServer server;
+  std::thread server_thread([&] { HTTPServers::startServer(&server, app_state, port); });
+  std::this_thread::sleep_for(std::chrono::milliseconds(300)); // Wait for the server to start
+
+  auto request_pairing = [&](const std::string &client_ip) {
+    auto pin = std::make_shared<boost::promise<std::string>>();
+    app_state->event_bus->fire_event(immer::box<events::PairSignal>(
+        events::PairSignal{.client_ip = client_ip, .host_ip = "127.0.0.1", .user_pin = pin}));
+    return pin->get_future();
+  };
+
+  // Answered right away with the preset PIN, nothing is left pending
+  for (int i = 0; i < preset_pin::MAX_ATTEMPTS; i++) {
+    auto pin = request_pairing("10.0.0.2");
+    REQUIRE(pin.wait_for(boost::chrono::seconds(2)) == boost::future_status::ready);
+    REQUIRE(pin.get() == "4321");
+  }
+  REQUIRE(app_state->pairing_atom->load()->size() == 0);
+
+  // Rate limited: the next one has to be approved by hand, so it's listed as pending
+  auto limited = request_pairing("10.0.0.2");
+  REQUIRE(limited.wait_for(boost::chrono::milliseconds(300)) == boost::future_status::timeout);
+  REQUIRE(app_state->pairing_atom->load()->size() == 1);
+
+  server.stop();
+  server_thread.join();
+  unsetenv("HEALER_PAIRING_PIN");
 }

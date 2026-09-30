@@ -5,6 +5,8 @@
 #include <netdb.h>
 #include <rest/endpoints.hpp>
 #include <rest/pairing_key.hpp>
+#include <rest/pairing_webhook.hpp>
+#include <rest/preset_pin.hpp>
 
 namespace HTTPServers {
 
@@ -182,12 +184,37 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     send_xml<SimpleWeb::HTTP>(resp, SimpleWeb::StatusCode::success_ok, xml);
   };
 
+  auto preset_pin = preset_pin::parse(utils::get_env("HEALER_PAIRING_PIN"));
+  if (preset_pin) {
+    logs::log(logs::warning,
+              "HEALER_PAIRING_PIN is set: any client that knows it can pair, remove it once you're done pairing");
+  }
+  auto preset_pin_attempts = std::make_shared<immer::atom<preset_pin::AttemptsMap>>();
+  std::string pairing_webhook_url = utils::get_env("HEALER_PAIRING_WEBHOOK", "");
   auto pair_handler = state->event_bus->register_handler<immer::box<events::PairSignal>>(
-      [pairing_atom](const immer::box<events::PairSignal> pair_sig) {
-        pairing_atom->update([&pair_sig](const immer::map<std::string, immer::box<events::PairSignal>> &m) {
-          auto secret = crypto::str_to_hex(crypto::random(8));
-          auto http_port = std::to_string(state::get_port(state::HTTP_PORT));
-          logs::log(logs::info, "Insert pin at http://{}:{}/pin/#{}", pair_sig->host_ip, http_port, secret);
+      [pairing_atom, preset_pin, preset_pin_attempts, pairing_webhook_url](
+          const immer::box<events::PairSignal> pair_sig) {
+        if (preset_pin) {
+          bool allowed = false;
+          preset_pin_attempts->update([&](const preset_pin::AttemptsMap &attempts) {
+            auto [is_allowed, updated] = preset_pin::allow(attempts, pair_sig->client_ip, preset_pin::clock::now());
+            allowed = is_allowed;
+            return updated;
+          });
+          if (allowed) {
+            logs::log(logs::info, "Answering pairing request from {} with HEALER_PAIRING_PIN", pair_sig->client_ip);
+            pair_sig->user_pin->set_value(*preset_pin);
+            return;
+          }
+          logs::log(logs::warning,
+                    "Too many pairing attempts from {}, it has to be approved with the PIN page instead",
+                    pair_sig->client_ip);
+        }
+        auto secret = crypto::str_to_hex(crypto::random(8));
+        auto http_port = std::to_string(state::get_port(state::HTTP_PORT));
+        auto pin_url = fmt::format("http://{}:{}/pin/#{}", pair_sig->host_ip, http_port, secret);
+        logs::log(logs::info, "Insert pin at {}", pin_url);
+        pairing_atom->update([&pair_sig, &secret](const immer::map<std::string, immer::box<events::PairSignal>> &m) {
           // filter out any other (dangling) pair request from the same client
           auto t_map = m.transient();
           for (auto [key, value] : m) {
@@ -199,6 +226,10 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
           t_map.set(secret, pair_sig);
           return t_map.persistent();
         });
+        // Only once the request is listed as pending, so that the link works right away
+        if (!pairing_webhook_url.empty()) {
+          pairing_webhook::notify(pairing_webhook_url, pair_sig->client_ip, pin_url, get_hostname);
+        }
       });
 
   // Start server (blocks until stopped, so the PairSignal handler above

@@ -15,6 +15,7 @@
 #include <immer/atom.hpp>
 #include <immer/box.hpp>
 #include <immer/map.hpp>
+#include <immer/set.hpp>
 #include <immer/vector.hpp>
 #include <moonlight/control.hpp>
 #include <moonlight/data-structures.hpp>
@@ -131,6 +132,13 @@ struct Lobby {
    */
   std::shared_ptr<immer::atom<virtual_display::wl_state_ptr>> wayland_display =
       std::make_shared<immer::atom<virtual_display::wl_state_ptr>>();
+
+  /**
+   * Input device nodes already handed to the lobby's compositor.
+   * The compositor can't remove devices, so each node is only added once (ex: a session leaving and re-joining).
+   */
+  std::shared_ptr<immer::atom<immer::set<std::string>>> compositor_input_nodes =
+      std::make_shared<immer::atom<immer::set<std::string>>>();
 
   /**
    * The audio sink that is currently being used by the lobby
