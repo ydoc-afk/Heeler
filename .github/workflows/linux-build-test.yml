@@ -154,7 +154,7 @@ jobs:
               libicu-dev \
               libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libboost-container-dev libboost-json-dev \
               libssl-dev \
-              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libopus-dev \
               libwayland-dev libwayland-server0 wayland-protocols libinput-dev libxkbcommon-dev libgbm-dev \
               libcurl4-openssl-dev \
               libpulse-dev \

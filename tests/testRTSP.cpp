@@ -322,13 +322,17 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                        REQUIRE(response);
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 2);
-                       REQUIRE(response.value().payloads.size() == 5);
+                       REQUIRE(response.value().payloads.size() == 7);
                        REQUIRE_THAT(response.value().payloads[0].first, Equals("sprop-parameter-sets"));
                        REQUIRE_THAT(response.value().payloads[0].second, Equals("AAAAAU"));
                        REQUIRE_THAT(response.value().payloads[1].second, Equals("fmtp:97 surround-params=21101"));
                        REQUIRE_THAT(response.value().payloads[2].second, Equals("fmtp:97 surround-params=642014235"));
                        REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=85301423675"));
-                       REQUIRE_THAT(response.value().payloads[4].second, Equals("x-ss-general.featureFlags: 3"));
+                       // High quality: a second line per channel count, one uncoupled stream per channel
+                       REQUIRE_THAT(response.value().payloads[4].second, Equals("fmtp:97 surround-params=660012345"));
+                       REQUIRE_THAT(response.value().payloads[5].second,
+                                    Equals("fmtp:97 surround-params=88001234567"));
+                       REQUIRE_THAT(response.value().payloads[6].second, Equals("x-ss-general.featureFlags: 3"));
                      });
   }
 
@@ -560,13 +564,17 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                        REQUIRE(response);
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 2);
-                       REQUIRE(response.value().payloads.size() == 5);
+                       REQUIRE(response.value().payloads.size() == 7);
                        REQUIRE_THAT(response.value().payloads[0].first, Equals("sprop-parameter-sets"));
                        REQUIRE_THAT(response.value().payloads[0].second, Equals("AAAAAU"));
                        REQUIRE_THAT(response.value().payloads[1].second, Equals("fmtp:97 surround-params=21101"));
                        REQUIRE_THAT(response.value().payloads[2].second, Equals("fmtp:97 surround-params=642014235"));
                        REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=85301423675"));
-                       REQUIRE_THAT(response.value().payloads[4].second, Equals("x-ss-general.featureFlags: 3"));
+                       // High quality: a second line per channel count, one uncoupled stream per channel
+                       REQUIRE_THAT(response.value().payloads[4].second, Equals("fmtp:97 surround-params=660012345"));
+                       REQUIRE_THAT(response.value().payloads[5].second,
+                                    Equals("fmtp:97 surround-params=88001234567"));
+                       REQUIRE_THAT(response.value().payloads[6].second, Equals("x-ss-general.featureFlags: 3"));
                      });
   }
 

@@ -7,6 +7,7 @@
 #include <core/virtual-display.hpp>
 #include <events/events.hpp>
 #include <fmt/format.h>
+#include <gst-plugin/gstmoonlightopusenc.hpp>
 #include <gst-plugin/gstrtpmoonlightpay_audio.hpp>
 #include <gst-plugin/gstrtpmoonlightpay_video.hpp>
 #include <gst-plugin/video.hpp>
@@ -72,6 +73,13 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
                            unsigned short client_port,
                            std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
                            std::shared_ptr<udp::socket> video_socket);
+
+/**
+ * Moonlight's high quality surround layout (one uncoupled stream per channel) can't be produced by opusenc:
+ * replaces the (first) opusenc in the pipeline with moonlightopusenc.
+ */
+std::string
+use_high_quality_opus_encoder(const std::string &pipeline, const audio::AudioMode &audio_mode, int packet_duration);
 
 void start_streaming_audio(immer::box<events::AudioSession> audio_session,
                            const std::shared_ptr<events::EventBusType> &event_bus,
@@ -158,6 +166,7 @@ inline void init() {
 
   gst_element_register(nullptr, "rtpmoonlightpay_video", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay_video);
   gst_element_register(nullptr, "rtpmoonlightpay_audio", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay_audio);
+  gst_element_register(nullptr, "moonlightopusenc", GST_RANK_NONE, GST_TYPE_MOONLIGHT_OPUS_ENC);
 
   moonlight::fec::init();
 }
