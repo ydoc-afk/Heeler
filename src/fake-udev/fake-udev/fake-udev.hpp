@@ -33,15 +33,18 @@ static bool connect(netlink_connection &conn, int domain, int type, int protocol
 }
 
 static bool send_msgs(netlink_connection &conn, const std::vector<std::string /* raw payload */> &msgs) {
-  iovec iov[msgs.size()];
-  for (int i = 0; i < msgs.size(); ++i) {
+  if (msgs.empty()) {
+    return true; // Nothing to send
+  }
+  std::vector<iovec> iov(msgs.size());
+  for (std::size_t i = 0; i < msgs.size(); ++i) {
     iov[i] = iovec{.iov_base = (char *)msgs[i].data(), .iov_len = msgs[i].size()};
   }
 
   msghdr msg = {
       .msg_name = &conn.sa,
       .msg_namelen = sizeof conn.sa,
-      .msg_iov = iov,
+      .msg_iov = iov.data(),
       .msg_iovlen = msgs.size(),
   };
   int rc = sendmsg(conn.fd, &msg, 0);
