@@ -55,6 +55,9 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}
+            # Calendar versions like v2026.09.0 aren't valid semver (leading zero), tag them as-is too
+            type=ref,event=tag
+            type=match,pattern=v(.*),group=1
             type=edge,branch=stable
             type=ref,event=branch
             type=raw,value=alpha
