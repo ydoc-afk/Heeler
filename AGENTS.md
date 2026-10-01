@@ -6,6 +6,19 @@ remote clients share a single Linux host to play games. Each client gets an on-d
 It implements the Moonlight protocol (pairing over HTTPS, RTSP handshake, ENet control channel, RTP
 video/audio) and hands video/audio off to GStreamer pipelines. Linux + Docker first; C++20.
 
+## Agent workflow rules
+
+- **Never block on `sleep` in a foreground shell command.** Waiting on CI (`gh pr checks`,
+  `gh run view`) with `sleep N && gh ...` freezes the whole agent loop with no output. Poll in a
+  background job instead (e.g. `bg_start` in pi, `run_in_background` in Claude Code) and check it
+  when it completes. One-shot short waits (≤ 20s) are fine; anything longer must be backgrounded.
+- **Git must never open an editor.** `git rebase --continue`, `cherry-pick`, `rebase -i`,
+  `commit --amend`, etc. will hang a non-interactive shell waiting for a commit message. Always set
+  `GIT_EDITOR=true` (or pass `--no-edit` / use `git commit --no-edit`) for these commands, and put a
+  timeout on any git command that could prompt.
+- **Timebox long-running commands** (builds, tests, pushes) so a hung command surfaces as a timeout
+  instead of stalling the session indefinitely.
+
 ## Companion repositories
 
 Heeler is split across three repos; the other two are integral and pulled in at build time — when
