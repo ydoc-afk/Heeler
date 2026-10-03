@@ -707,6 +707,55 @@ TEST_CASE("HTTP /unpair input validation", "[HTTP]") {
   REQUIRE(still_alive == 400);
 }
 
+TEST_CASE("HTTP PIN page", "[HTTP]") {
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = std::make_shared<events::EventBusType>()});
+
+  constexpr int port = 47792;
+  HttpServer server;
+  std::thread server_thread([&] { HTTPServers::startServer(&server, app_state, port); });
+  std::this_thread::sleep_for(std::chrono::milliseconds(300)); // Wait for the server to start
+
+  struct Reply {
+    long status = 0;
+    std::string content_type;
+    std::string location;
+  };
+  auto get = [&](const std::string &path) {
+    auto curl = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>(curl_easy_init(), curl_easy_cleanup);
+    curl_easy_setopt(curl.get(), CURLOPT_URL, fmt::format("http://127.0.0.1:{}{}", port, path).c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 5L);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, +[](char *, size_t s, size_t n, void *) { return s * n; });
+    Reply reply;
+    if (curl_easy_perform(curl.get()) == CURLE_OK) {
+      char *value = nullptr;
+      curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &reply.status);
+      if (curl_easy_getinfo(curl.get(), CURLINFO_CONTENT_TYPE, &value) == CURLE_OK && value) {
+        reply.content_type = value;
+      }
+      if (curl_easy_getinfo(curl.get(), CURLINFO_REDIRECT_URL, &value) == CURLE_OK && value) {
+        reply.location = value;
+      }
+    }
+    return reply;
+  };
+
+  auto page = get("/pin/");
+  auto no_slash = get("/pin");
+
+  server.stop();
+  server_thread.join();
+
+  // Served as HTML, browsers that don't guess the type would show a blank page otherwise
+  REQUIRE(page.status == 200);
+  REQUIRE_THAT(page.content_type, Catch::Matchers::StartsWith("text/html"));
+  // A typed /pin lands on the page instead of the Moonlight XML 404
+  REQUIRE(no_slash.status == 301);
+  REQUIRE(no_slash.location == fmt::format("http://127.0.0.1:{}/pin/", port));
+}
+
 TEST_CASE("Pairing key", "[PAIRING]") {
   using namespace pairing_key;
   auto now = clock::now();

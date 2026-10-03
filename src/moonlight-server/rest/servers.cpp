@@ -82,7 +82,18 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
 
   auto pairing_atom = state->pairing_atom;
 
-  server->resource["^/pin/$"]["GET"] = [](auto resp, auto req) { resp->write(pin_html); };
+  server->resource["^/pin/$"]["GET"] = [](auto resp, auto req) {
+    // Without a Content-Type some browsers don't render the page at all
+    SimpleWeb::CaseInsensitiveMultimap headers;
+    headers.emplace("Content-Type", "text/html; charset=utf-8");
+    resp->write(pin_html, headers);
+  };
+  // The page lives at /pin/, a typed /pin (no trailing slash) would otherwise get the Moonlight XML 404
+  server->resource["^/pin$"]["GET"] = [](auto resp, auto req) {
+    SimpleWeb::CaseInsensitiveMultimap headers;
+    headers.emplace("Location", "/pin/");
+    resp->write(SimpleWeb::StatusCode::redirection_moved_permanently, headers);
+  };
   server->resource["^/pin/$"]["POST"] = [pairing_atom](auto resp, auto req) {
     try {
       bt::ptree pt;
