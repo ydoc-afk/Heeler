@@ -523,6 +523,32 @@ inline void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
+/**
+ * Replaces a running session with the one created by a resume request: the new session takes over the display
+ * and the devices (already plugged into the container) of the old one.
+ */
+inline void hand_over_session(const immer::box<state::AppState> &state,
+                              events::StreamSession old_session,
+                              const std::shared_ptr<events::StreamSession> &new_session) {
+  // The old stream may still be running (the client went away without an ENet disconnect, ex: closing the
+  // window), stop it like a disconnect would: otherwise the RTSP handshake that follows starts a second set of
+  // pipelines on the same display, next to the old ones (#501).
+  // When the client did disconnect this is a no-op: its pipelines are already gone.
+  state->event_bus->fire_event(
+      immer::box<events::PauseStreamEvent>(events::PauseStreamEvent{.session_id = old_session.session_id}));
+
+  new_session->wayland_display = std::move(old_session.wayland_display);
+  new_session->mouse = std::move(old_session.mouse);
+  new_session->keyboard = std::move(old_session.keyboard);
+  new_session->joypads = std::move(old_session.joypads);
+  new_session->pen_tablet = std::move(old_session.pen_tablet);
+  new_session->touch_screen = std::move(old_session.touch_screen);
+
+  state->running_sessions->update([&old_session, new_session](const immer::vector<events::StreamSession> ses_v) {
+    return state::remove_session(ses_v, old_session).push_back(*new_session);
+  });
+}
+
 inline void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
                    const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
                    const state::PairedClient &current_client,
@@ -538,18 +564,7 @@ inline void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
       launch_failed(response, 400, "The resume request is missing its encryption key (rikey/rikeyid)");
       return;
     }
-    // Carry over the old session display handle
-    new_session->wayland_display = std::move(old_session->wayland_display);
-    // Carry over the old session devices, they'll be already plugged into the container
-    new_session->mouse = std::move(old_session->mouse);
-    new_session->keyboard = std::move(old_session->keyboard);
-    new_session->joypads = std::move(old_session->joypads);
-    new_session->pen_tablet = std::move(old_session->pen_tablet);
-    new_session->touch_screen = std::move(old_session->touch_screen);
-
-    state->running_sessions->update([&old_session, new_session](const immer::vector<events::StreamSession> ses_v) {
-      return state::remove_session(ses_v, old_session.value()).push_back(*new_session);
-    });
+    hand_over_session(state, old_session.value(), new_session);
 
     auto rtsp_ip = get_rtsp_ip_string(get_host_ip<SimpleWeb::HTTPS>(request, state), *new_session);
     auto xml = moonlight::launch_resume(rtsp_ip, std::to_string(get_port(state::RTSP_SETUP_PORT)));

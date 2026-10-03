@@ -467,6 +467,7 @@ Config load_or_default(const std::string &source,
                 .config_source = source,
                 .support_hevc = default_encoders->hevc_encoder.has_value(),
                 .support_av1 = default_encoders->av1_is_hardware,
+                .default_video_producer_buffer_caps = default_encoders->producer_buffer_caps,
                 .paired_clients = clients_atom,
                 .profiles = profiles_atom};
 }
