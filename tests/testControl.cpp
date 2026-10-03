@@ -145,3 +145,20 @@ TEST_CASE("control server fails cleanly when the port is unavailable", "[CONTROL
       std::async(std::launch::async, [&] { control::run_control(port, sessions, event_bus, 20, 100ms, "127.0.0.1"); });
   REQUIRE(done.wait_for(5s) == std::future_status::ready);
 }
+
+TEST_CASE("A reconnecting client drops its previous ENet peer", "[CONTROL]") {
+  ENetPeer peers[3] = {};
+  ENetPeer *old_peer = &peers[0], *new_peer = &peers[1], *other_client = &peers[2];
+  auto session = immer::box<wolf::core::events::StreamSession>(wolf::core::events::StreamSession{.session_id = 42});
+  auto other_session =
+      immer::box<wolf::core::events::StreamSession>(wolf::core::events::StreamSession{.session_id = 7});
+
+  auto connected = control::enet_clients_map{}.set(old_peer, session).set(other_client, other_session);
+
+  // The previous connection of the same session must go (#75), the other clients are untouched
+  REQUIRE(control::stale_peers(connected, 42, new_peer) == std::vector<ENetPeer *>{old_peer});
+  // Nothing to drop on a first connection
+  REQUIRE(control::stale_peers(connected, 99, new_peer).empty());
+  // The new peer itself is never stale, even when it's already in the map
+  REQUIRE(control::stale_peers(connected.set(new_peer, session).erase(old_peer), 42, new_peer).empty());
+}

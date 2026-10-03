@@ -8,6 +8,7 @@
 #include <range/v3/view.hpp>
 #include <state/data-structures.hpp>
 #include <thread>
+#include <vector>
 
 namespace control {
 
@@ -24,6 +25,14 @@ void run_control(int port,
 using enet_clients_map = immer::map<ENetPeer *, immer::box<events::StreamSession>>;
 
 std::shared_ptr<ENetPeer> to_shared_ptr(ENetPeer *peer);
+
+/**
+ * The other peers that are still mapped to session_id when new_peer connects for it.
+ * They belong to a previous connection of the same client (ex: before a resume) and must be dropped:
+ * once they time out their disconnect would pause the stream that new_peer just started.
+ */
+std::vector<ENetPeer *>
+stale_peers(const enet_clients_map &connected_clients, std::size_t session_id, const ENetPeer *new_peer);
 
 bool encrypt_and_send(std::string_view payload,
                       std::string_view aes_key,
