@@ -290,6 +290,11 @@ TEST_CASE("APPs APIs", "[API]") {
   REQUIRE(moonlight_profile);
   immer::vector<immer::box<events::App>> wolf_apps = moonlight_profile.value()->apps->load();
   REQUIRE(wolf_apps.at(2)->base.title == "Test app");
+  // No caps in the request: it gets the ones picked for the default encoder, or no frame is ever produced (#489)
+  REQUIRE(!wolf_apps.at(2)->video_producer_buffer_caps.empty());
+  REQUIRE(wolf_apps.at(2)->video_producer_buffer_caps == config.default_video_producer_buffer_caps);
+  // and the caps are part of the API, so a GET -> POST round trip keeps them
+  REQUIRE(apps2.apps[2].video_producer_buffer_caps == config.default_video_producer_buffer_caps);
 
   // Test that we can remove an app
   auto app_delete = AppDeleteRequest{.id = "test"};

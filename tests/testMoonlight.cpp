@@ -670,6 +670,38 @@ TEST_CASE("Multiple users", "[HTTP]") {
   REQUIRE(good_mode_session->display_mode.refreshRate == 30);
 }
 
+TEST_CASE("Resume stops the stream that is still running", "[HTTP]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto app_state = immer::box<state::AppState>(
+      state::AppState{.config = state::Config{},
+                      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+                      .event_bus = event_bus,
+                      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()});
+
+  auto client = state::PairedClient{.app_state_folder = "test"};
+  auto app = events::App{.base = moonlight::App{.title = "test_app"}};
+  auto launch_headers = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}};
+  auto old_session = endpoints::https::create_run_session(launch_headers, "10.0.0.2", client, app_state, app);
+  REQUIRE(old_session);
+  app_state->running_sessions->update([&](auto &sessions) { return sessions.push_back(*old_session); });
+
+  std::vector<std::size_t> paused;
+  auto pause_handler = event_bus->register_handler<immer::box<events::PauseStreamEvent>>(
+      [&paused](const immer::box<events::PauseStreamEvent> &ev) { paused.push_back(ev->session_id); });
+
+  auto resume_headers = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "abcd"}, {"rikeyid", "1"}};
+  auto new_session = endpoints::https::create_run_session(resume_headers, "10.0.0.2", client, app_state, app);
+  REQUIRE(new_session);
+  endpoints::https::hand_over_session(app_state, *old_session, new_session);
+
+  // The old pipelines are told to stop before the new ones get created on the same display (#501)
+  REQUIRE(paused == std::vector<std::size_t>{old_session->session_id});
+  // and the client now has a single session, with the new keys
+  auto sessions = app_state->running_sessions->load();
+  REQUIRE(sessions->size() == 1);
+  REQUIRE(sessions->at(0).aes_key == new_session->aes_key);
+}
+
 TEST_CASE("HTTP /unpair input validation", "[HTTP]") {
   // /unpair is unauthenticated: malformed requests must get an error reply, never take the server down
   auto app_state = immer::box<state::AppState>(
