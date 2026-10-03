@@ -91,6 +91,7 @@ Then pair a Moonlight client:
 
 1. Add your host in Moonlight, it shows a 4-digit PIN
 2. Open `http://heeler:47989/pin/` (`heeler` being your server's hostname), unlock it with your `HEALER_PAIRING_KEY`
+   (or bookmark `http://heeler:47989/pin/#key=<your key>` to unlock it automatically, it stays open waiting for devices)
 3. Type the PIN next to the device that's waiting, and start playing
 
 NVIDIA, Podman and other setups are covered in the
