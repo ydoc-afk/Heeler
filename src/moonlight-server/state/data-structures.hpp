@@ -94,6 +94,12 @@ struct Config {
   bool support_av1;
 
   /**
+   * The Wayland producer caps that match the default encoder GPU,
+   * used for apps added at runtime that don't specify their own
+   */
+  std::string default_video_producer_buffer_caps = "video/x-raw";
+
+  /**
    * Mutable, paired_clients will be loaded up on startup
    * but can be added at runtime
    */

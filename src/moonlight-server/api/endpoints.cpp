@@ -115,22 +115,44 @@ void UnixSocketServer::endpoint_Apps(const HTTPRequest &req, std::shared_ptr<Uni
   send_http(socket, 200, rfl::json::write(res));
 }
 
+/**
+ * Apps added over the API don't come with the Wayland producer caps that parse_apps() computes for the ones in
+ * config.toml; without them the producer pipeline can't negotiate and no frame is ever produced (#489).
+ * Reuse the caps of an app that encodes on the same GPU, or the ones picked for the default encoder.
+ */
+static events::App
+with_producer_caps(events::App app, const state::Config &config, const state::ProfilesList &profiles) {
+  if (!app.video_producer_buffer_caps.empty()) {
+    return app;
+  }
+  app.video_producer_buffer_caps = config.default_video_producer_buffer_caps;
+  for (const auto &profile : profiles) {
+    for (const auto &existing : profile->apps->load().get()) {
+      if (existing->encoder_render_node == app.encoder_render_node && !existing->video_producer_buffer_caps.empty()) {
+        app.video_producer_buffer_caps = existing->video_producer_buffer_caps;
+        return app;
+      }
+    }
+  }
+  return app;
+}
+
 void UnixSocketServer::endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto app = rfl::json::read<rfl::Reflector<events::App>::ReflType>(req.body);
   if (app) {
     auto profiles = state_->app_state->config->profiles->load().get();
-    state::update_profiles(
-        state_->app_state->config,
-        profiles | //
-            ranges::views::transform([app = app.value(), this](const immer::box<events::Profile> &profile) {
-              if (profile->id == events::MOONLIGHT_PROFILE_ID) {
-                profile->apps->update([app, this](auto &apps) {
-                  return apps.push_back(rfl::Reflector<events::App>::to(app, this->state_->app_state->event_bus));
-                });
-              }
-              return profile;
-            }) |
-            ranges::to<state::ProfilesList>());
+    auto new_app = with_producer_caps(rfl::Reflector<events::App>::to(app.value(), state_->app_state->event_bus),
+                                      state_->app_state->config.get(),
+                                      profiles);
+    state::update_profiles(state_->app_state->config,
+                           profiles | //
+                               ranges::views::transform([new_app](const immer::box<events::Profile> &profile) {
+                                 if (profile->id == events::MOONLIGHT_PROFILE_ID) {
+                                   profile->apps->update([new_app](auto &apps) { return apps.push_back(new_app); });
+                                 }
+                                 return profile;
+                               }) |
+                               ranges::to<state::ProfilesList>());
 
     send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
   } else {
@@ -186,9 +208,15 @@ void UnixSocketServer::endpoint_AddProfile(const HTTPRequest &req, std::shared_p
     auto p = profile_req.value();
 
     auto profiles = state_->app_state->config->profiles->load().get();
-    state::update_profiles(
-        state_->app_state->config,
-        profiles.push_back(rfl::Reflector<events::Profile>::to(p, this->state_->app_state->event_bus)));
+    auto new_profile = rfl::Reflector<events::Profile>::to(p, this->state_->app_state->event_bus);
+    new_profile.apps->update([&](const auto &apps) {
+      return apps | //
+             ranges::views::transform([&](const immer::box<events::App> &app) {
+               return immer::box<events::App>(with_producer_caps(app.get(), state_->app_state->config.get(), profiles));
+             }) |
+             ranges::to<immer::vector<immer::box<events::App>>>();
+    });
+    state::update_profiles(state_->app_state->config, profiles.push_back(new_profile));
     send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
   } else {
     logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, profile_req.error().what());
