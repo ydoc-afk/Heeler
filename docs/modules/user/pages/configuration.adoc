@@ -57,6 +57,10 @@ The `WOLF_*` names are still accepted as deprecated aliases for backwards compat
 |nvidia-driver-vol
 |The name of the externally created Docker Volume that holds the Nvidia drivers
 
+|HEALER_NVIDIA_WINE_DIR
+|_(unset)_
+|Host folder with the Nvidia driver's Windows DLLs (`nvngx.dll`, `_nvngx.dll`), mounted read-only into app containers on Nvidia GPUs so Proton games can offer DLSS/DLAA (without them games fall back to FSR). The container toolkit doesn't provide these. Usually `/usr/lib/nvidia/wine` (Arch) or `/usr/lib/x86_64-linux-gnu/nvidia/wine` (Debian/Ubuntu); it's mounted at the same path inside the container, use `host_dir:container_dir` to pick another. Skipped for apps that already mount that path.
+
 |HOST_APPS_STATE_FOLDER
 |/etc/wolf
 |The base folder in the host where the running apps will store permanent state, if not set Heeler will automatically use the path that is mounted in the docker container
