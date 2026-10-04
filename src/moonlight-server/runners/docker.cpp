@@ -128,6 +128,25 @@ void RunDocker::run(std::string_view session_id,
     }
   }
 
+  // DLSS/DLAA need NVIDIA's Windows-side NGX DLLs (nvngx.dll, _nvngx.dll), which the container toolkit doesn't
+  // mount. Proton looks for them in nvidia/wine/ next to libGLX_nvidia.so.0, so expose the host's copy there.
+  // Heeler can't see the host filesystem, so the folder has to be given: "host_dir" or "host_dir:container_dir".
+  if (get_vendor(render_node) == NVIDIA) {
+    if (auto wine_dir = utils::get_env("HEALER_NVIDIA_WINE_DIR"); wine_dir && *wine_dir) {
+      std::string_view dir = wine_dir;
+      auto sep = dir.find(':');
+      auto source = utils::to_string(dir.substr(0, sep));
+      auto destination = sep == std::string_view::npos ? source : utils::to_string(dir.substr(sep + 1));
+      // Docker refuses duplicate mount points, so leave it alone if the app config already mounts it
+      if (std::none_of(mounts.begin(), mounts.end(), [&](const MountPoint &m) {
+            return m.destination == destination;
+          })) {
+        logs::log(logs::debug, "[DOCKER] Mounting NVIDIA wine DLLs {} -> {}", source, destination);
+        mounts.push_back(MountPoint{.source = source, .destination = destination, .mode = "ro"});
+      }
+    }
+  }
+
   { // Setup Heeler socket path (if the runner needs it, and it hasn't been overridden via ENV)
     auto socket_path_container_env = std::find_if(full_env.begin(), full_env.end(), [](const std::string &env) {
       return env.find("WOLF_SOCKET_PATH") != std::string::npos;
