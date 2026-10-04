@@ -125,6 +125,15 @@ void RunDocker::run(std::string_view session_id,
       if (nvd_caps_env == full_env.end()) {
         full_env.push_back("NVIDIA_DRIVER_CAPABILITIES=all");
       }
+
+      // The NVIDIA toolkit installs its GBM backend in /usr/lib/gbm, which libgbm doesn't search by default.
+      // Without this Sway can't allocate buffers inside the app container and the stream stays blank.
+      auto gbm_env = std::find_if(full_env.begin(), full_env.end(), [](const std::string &env) {
+        return env.find("GBM_BACKENDS_PATH") != std::string::npos;
+      });
+      if (gbm_env == full_env.end()) {
+        full_env.push_back("GBM_BACKENDS_PATH=/usr/lib/gbm");
+      }
     }
   }
 
