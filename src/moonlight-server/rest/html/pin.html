@@ -109,7 +109,7 @@
 
 <script type="application/javascript">
     const content = document.getElementById("content");
-    const deepLinkSecret = window.location.hash.substring(1);
+    const deepLinkSecret = /^key=/.test(window.location.hash.substring(1)) ? "" : window.location.hash.substring(1);
     const POLL_MS = 2500;
     const KEY_STORAGE = "heeler-pairing-key";
 
@@ -130,6 +130,14 @@
             }
         } catch (e) {
         }
+    }
+
+    // Bookmarkable /pin/#key=<HEALER_PAIRING_KEY>: unlock the page without typing the key,
+    // then drop it from the address bar so it doesn't linger in screenshots or shared URLs
+    const keyFromUrl = new URLSearchParams(window.location.hash.substring(1)).get("key");
+    if (keyFromUrl) {
+        saveKey(keyFromUrl);
+        history.replaceState(null, "", window.location.pathname + window.location.search);
     }
 
     let pairingKey = loadKey();
