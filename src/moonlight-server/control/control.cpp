@@ -132,6 +132,17 @@ std::shared_ptr<ENetPeer> to_shared_ptr(ENetPeer *peer) {
   });
 }
 
+std::vector<ENetPeer *>
+stale_peers(const enet_clients_map &connected_clients, std::size_t session_id, const ENetPeer *new_peer) {
+  std::vector<ENetPeer *> stale;
+  for (const auto &[peer, session] : connected_clients) {
+    if (peer != new_peer && session->session_id == session_id) {
+      stale.push_back(peer);
+    }
+  }
+  return stale;
+}
+
 void run_control(int port,
                  const state::SessionsAtoms &running_sessions,
                  const std::shared_ptr<events::EventBusType> &event_bus,
@@ -175,6 +186,14 @@ void run_control(int port,
           break;
         case ENET_EVENT_TYPE_CONNECT:
           logs::log(logs::debug, "[ENET] connected client: {}:{}", client_ip, client_port);
+          // The client may come back (ex: a resume) before its previous connection timed out, drop that one now:
+          // when it times out its DISCONNECT would pause the stream we are about to start (#75)
+          for (auto stale_peer : stale_peers(*connected_clients.load(), client_session->session_id, event.peer)) {
+            logs::log(logs::debug, "[ENET] dropping the previous connection of session {}", client_session->session_id);
+            connected_clients.update([stale_peer](const enet_clients_map &m) { return m.erase(stale_peer); });
+            // Resets the peer right away, no DISCONNECT event is generated for it
+            enet_peer_disconnect_now(stale_peer, 0);
+          }
           connected_clients.update([peer = event.peer, client_session](const enet_clients_map &m) {
             return m.set(peer, client_session.value());
           });
