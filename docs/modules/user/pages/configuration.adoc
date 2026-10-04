@@ -184,7 +184,7 @@ id = 'moonlight-profile-id'
         [profiles.apps.runner]
         type = 'docker'
         name = 'Heeler-UI'
-        image = 'ghcr.io/games-on-whales/wolf-ui:main'
+        image = 'ghcr.io/ydoc-afk/wolf-ui:2026.10.0'
         devices = []
         env = [
             'GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*',
