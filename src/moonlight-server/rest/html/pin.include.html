@@ -82,6 +82,7 @@ R"for_c++_include(
 
         .key {
             gap: 0.5rem;
+            flex-wrap: wrap;
         }
 
         .key input {
@@ -89,6 +90,23 @@ R"for_c++_include(
             height: auto;
             margin: 0;
             font-size: 1.1rem;
+        }
+
+        .key label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-basis: 100%;
+            gap: 0.4rem;
+            font-size: 0.9rem;
+            color: white;
+        }
+
+        .key input[type="checkbox"] {
+            width: auto;
+            height: auto;
+            margin: 0;
+            padding: 0;
         }
 
         .key button {
@@ -180,11 +198,25 @@ R"for_c++_include(
         input.type = "password";
         input.placeholder = "Pairing key";
         input.autocomplete = "current-password";
+        // The key is case-sensitive hex: keep phone keyboards from capitalising or "fixing" it
+        input.autocapitalize = "off";
+        input.autocorrect = "off";
+        input.spellcheck = false;
+        // Lets you check what was typed or pasted before sending it
+        const show = document.createElement("label");
+        const showBox = document.createElement("input");
+        showBox.type = "checkbox";
+        showBox.addEventListener("change", () => {
+            input.type = showBox.checked ? "text" : "password";
+        });
+        show.appendChild(showBox);
+        show.appendChild(document.createTextNode("Show key"));
         const button = document.createElement("button");
         button.type = "submit";
         button.textContent = "Unlock";
         form.appendChild(input);
         form.appendChild(button);
+        form.appendChild(show);
         form.addEventListener("submit", (ev) => {
             ev.preventDefault();
             if (!input.value) return;
@@ -291,7 +323,7 @@ R"for_c++_include(
                 const hadKey = !!pairingKey;
                 pairingKey = "";
                 saveKey("");
-                showKeyForm(hadKey ? "Wrong pairing key, try again." :
+                showKeyForm(hadKey ? "Wrong pairing key. It is the HEALER_PAIRING_KEY value; check for typos (it is case-sensitive)." :
                     "Enter the pairing key (HEALER_PAIRING_KEY) to see the devices waiting to pair.");
                 return;
             }
