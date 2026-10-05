@@ -2,8 +2,13 @@ name: Docker build
 
 on:
   push:
-    branches: [stable]
+    branches: [stable, nightly]
     tags: ["v*"]
+  # Nightly image from the "nightly" branch. Scheduled workflows always run the default branch's copy of this
+  # file, so the nightly branch is checked out explicitly below. Manual runs build nightly too.
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
   # Check that the image still builds when the Docker setup changes (nothing is pushed for PRs)
   pull_request:
     paths:
@@ -14,11 +19,36 @@ permissions:
   packages: write
 
 jobs:
+  # Scheduled runs only build when the nightly branch got new commits in the last day
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'nightly' || '' }}
+          fetch-depth: 100
+      - name: Check for new commits
+        id: check
+        run: |
+          build=true
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -z "$(git log --since='25 hours ago' -1 --format=%H)" ]; then
+            build=false
+            echo "No new commits on nightly in the last 25 hours, skipping the build"
+          fi
+          echo "build=${build}" >> $GITHUB_OUTPUT
+
   buildx:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'nightly' || '' }}
 
       # Set derived configuration variables:
       # - images: images to build (docker and/or github)
@@ -34,13 +64,19 @@ jobs:
           REGISTRY_IMAGE="ghcr.io/${{ github.repository_owner }}/wolf"
           IMAGES="${REGISTRY_IMAGE}"
           PUSH=${{ github.event_name != 'pull_request' }}
+          # Nightly: the nightly branch, the scheduled run, or a manual run
+          NIGHTLY=${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/nightly') && 'true' || 'false' }}
+          CACHE_TAG=buildcache
+          if [ "$NIGHTLY" = "true" ]; then CACHE_TAG=buildcache-nightly; fi
+          echo "nightly=${NIGHTLY}" >> $GITHUB_OUTPUT
+          echo "sha=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
           echo "has_github_token=true" >> $GITHUB_OUTPUT
           if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
             IMAGES="gameonwhales/wolf,${IMAGES}"
             echo "has_docker_token=true" >> $GITHUB_OUTPUT
           fi
-          echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
-          echo "cache_to=type=registry,ref=${REGISTRY_IMAGE}:buildcache,mode=max" >> $GITHUB_OUTPUT
+          echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:${CACHE_TAG}" >> $GITHUB_OUTPUT
+          echo "cache_to=type=registry,ref=${REGISTRY_IMAGE}:${CACHE_TAG},mode=max" >> $GITHUB_OUTPUT
           echo "images=${IMAGES}" >> $GITHUB_OUTPUT
           echo "push=${PUSH}" >> $GITHUB_OUTPUT
           echo "github_server_url=${GITHUB_SERVER_URL}" >> $GITHUB_OUTPUT
@@ -58,10 +94,14 @@ jobs:
             # Calendar versions like v2026.09.0 aren't valid semver (leading zero), tag them as-is too
             type=ref,event=tag
             type=match,pattern=v(.*),group=1
-            type=edge,branch=stable
-            type=ref,event=branch
-            type=raw,value=alpha
-            type=sha
+            type=edge,branch=stable,enable=${{ steps.prep.outputs.nightly != 'true' }}
+            type=ref,event=branch,enable=${{ steps.prep.outputs.nightly != 'true' }}
+            type=raw,value=alpha,enable=${{ steps.prep.outputs.nightly != 'true' }}
+            type=sha,enable=${{ steps.prep.outputs.nightly != 'true' }}
+            # Nightly builds: :nightly (moving), :nightly-YYYYMMDD, and the commit they were built from
+            type=raw,value=nightly,enable=${{ steps.prep.outputs.nightly == 'true' }}
+            type=raw,value=nightly-{{date 'YYYYMMDD'}},enable=${{ steps.prep.outputs.nightly == 'true' }}
+            type=raw,value=sha-${{ steps.prep.outputs.sha }},enable=${{ steps.prep.outputs.nightly == 'true' }}
           flavor: latest=false # let's not produce a :latest tag
 
       - name: Set up Docker Buildx
