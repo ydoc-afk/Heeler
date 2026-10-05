@@ -17,6 +17,14 @@ export HEALER_RENDER_NODE=${HEALER_RENDER_NODE:-/dev/dri/renderD128}
 export HEALER_ENCODER_NODE=${HEALER_ENCODER_NODE:-$HEALER_RENDER_NODE}
 export GST_GL_DRM_DEVICE=${GST_GL_DRM_DEVICE:-$HEALER_ENCODER_NODE}
 
+# The NVIDIA container toolkit installs its GBM backend in /usr/lib/gbm, which libgbm doesn't search by default.
+# Without it the compositor can't allocate display buffers ("Failed to create DMA buffer", "Failed to create
+# GsCUDABuf") and every stream fails on a fresh container. Only set when the toolkit provided the folder, and
+# never override a value the user set.
+if [ -z "${GBM_BACKENDS_PATH:-}" ] && [ -d /usr/lib/gbm ]; then
+    export GBM_BACKENDS_PATH=/usr/lib/gbm
+fi
+
 # Update fake-udev if missing from the path
 export HEALER_DOCKER_FAKE_UDEV_PATH=${HEALER_DOCKER_FAKE_UDEV_PATH:-$HOST_APPS_STATE_FOLDER/fake-udev}
 cp /wolf/fake-udev $HEALER_DOCKER_FAKE_UDEV_PATH
