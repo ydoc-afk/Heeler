@@ -241,13 +241,12 @@ base_create_json = """
 """
 
 [[profiles.apps]]
-title = 'Desktop (xfce)'
-icon_png_path = "https://games-on-whales.github.io/wildlife/apps/xfce/assets/icon.png"
+title = 'Desktop (Kubuntu)'
 
 [profiles.apps.runner]
 type = 'docker'
-name = 'WolfXFCE'
-image = 'ghcr.io/games-on-whales/xfce:edge'
+name = 'WolfKubuntu'
+image = 'ghcr.io/ydoc-afk/kubuntu:nightly'
 env = ['GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*']
 devices = []
 mounts = []
