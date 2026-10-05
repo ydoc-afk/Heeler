@@ -322,8 +322,8 @@ image = 'ghcr.io/ydoc-afk/eden:nightly'
 env = ['GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*']
 devices = []
 # Shared Switch data, managed in one place on the host:
-#   /mnt/vault/switch/prod.keys, /mnt/vault/switch/firmware/, /mnt/vault/switch/games/
-mounts = ['/mnt/vault/switch:/switch:ro']
+#   /home/codyw/switch/prod.keys, /home/codyw/switch/firmware/, /home/codyw/switch/games/
+mounts = ['/home/codyw/switch:/switch:ro']
 ports = []
 base_create_json = """
 {
