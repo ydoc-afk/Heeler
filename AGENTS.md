@@ -192,6 +192,15 @@ Learned from the codebase itself — read before touching the areas below:
   `testMoonlight.cpp` — when changing packet structs, check the packed layouts there and in
   `src/moonlight-protocol/moonlight/control.hpp` (`#pragma pack(push, 1)`).
 
+## Branches, nightlies and releases
+
+- `stable` is what gets released. Tags `vYYYY.MM.N` build `ghcr.io/ydoc-afk/wolf:YYYY.MM.N`.
+- `nightly` is the integration branch: feature PRs target it first, so changes run on a real host before they reach
+  `stable`. Pushes to it build `wolf:nightly`; a scheduled run (03:00 UTC, only when `nightly` got commits) also
+  tags `wolf:nightly-YYYYMMDD`. The schedule lives in `docker-build.yml` on `stable` (GitHub only runs scheduled
+  workflows from the default branch) and checks out `nightly` itself.
+- Promote with a PR `nightly` -> `stable`, then tag. Hotfixes go to `stable` and are merged back into `nightly`.
+
 ## Runtime configuration (env vars)
 
 Behavior is driven by `HEALER_*` env vars read via `utils::get_env` (full working set in `wolf.cpp` and
