@@ -21,6 +21,7 @@ using Catch::Matchers::Equals;
 #include <rest/helpers.hpp>
 #include <rest/pairing_key.hpp>
 #include <rest/preset_pin.hpp>
+#include <rest/trusted_nets.hpp>
 #include <sessions/handlers.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
@@ -827,6 +828,117 @@ TEST_CASE("Pairing key", "[PAIRING]") {
     REQUIRE(second == Result::WRONG_KEY);
     REQUIRE(after_second.find("10.0.0.2")->failures == 1);
   }
+}
+
+TEST_CASE("Trusted networks", "[PAIRING]") {
+  using namespace trusted_nets;
+  auto trusted = [](const std::string &ip, const std::vector<Net> &nets) {
+    return is_trusted(boost::asio::ip::make_address(ip), nets);
+  };
+
+  SECTION("Defaults cover LAN and Tailscale, not the internet or loopback") {
+    auto nets = from_env(nullptr);
+    REQUIRE(trusted("192.168.1.205", nets));
+    REQUIRE(trusted("10.1.2.3", nets));
+    REQUIRE(trusted("172.16.0.1", nets));
+    REQUIRE(trusted("172.31.255.255", nets));
+    REQUIRE(!trusted("172.32.0.1", nets));
+    REQUIRE(!trusted("172.15.255.255", nets));
+    REQUIRE(trusted("169.254.1.1", nets));
+    // Tailscale CGNAT 100.64.0.0/10 and its IPv6 range
+    REQUIRE(trusted("100.64.0.1", nets));
+    REQUIRE(trusted("100.104.89.15", nets));
+    REQUIRE(trusted("100.127.255.255", nets));
+    REQUIRE(!trusted("100.128.0.1", nets));
+    REQUIRE(!trusted("100.63.255.255", nets));
+    REQUIRE(trusted("fd7a:115c:a1e0::1", nets));
+    REQUIRE(trusted("fe80::1", nets));
+    REQUIRE(!trusted("2001:db8::1", nets));
+    REQUIRE(!trusted("8.8.8.8", nets));
+    // Reverse proxies and `tailscale serve`/Funnel connect from loopback
+    REQUIRE(!trusted("127.0.0.1", nets));
+    REQUIRE(!trusted("::1", nets));
+  }
+
+  SECTION("IPv4 clients on a dual-stack socket are matched as IPv4") {
+    auto nets = from_env(nullptr);
+    REQUIRE(trusted("::ffff:192.168.1.5", nets));
+    REQUIRE(!trusted("::ffff:8.8.8.8", nets));
+  }
+
+  SECTION("Custom lists: single addresses, CIDRs, any separator, invalid entries skipped") {
+    auto nets = from_env("203.0.113.7, 198.51.100.0/24;bogus 300.1.1.1/8 10.0.0.0/33 fd00::/8");
+    REQUIRE(nets.size() == 3);
+    REQUIRE(trusted("203.0.113.7", nets));
+    REQUIRE(!trusted("203.0.113.8", nets));
+    REQUIRE(trusted("198.51.100.99", nets));
+    REQUIRE(!trusted("198.51.101.1", nets));
+    REQUIRE(trusted("fd12::1", nets));
+    REQUIRE(!trusted("192.168.1.1", nets));
+  }
+
+  SECTION("Set but empty trusts nobody") {
+    auto nets = from_env("");
+    REQUIRE(nets.empty());
+    REQUIRE(!trusted("192.168.1.205", nets));
+  }
+}
+
+TEST_CASE("HTTP PIN list needs the key outside trusted networks", "[HTTP]") {
+  // The test client connects from 127.0.0.1, which is not trusted by default
+  struct Case {
+    const char *key;  // HEALER_PAIRING_KEY, nullptr = unset
+    const char *nets; // HEALER_PIN_TRUSTED_NETS, nullptr = unset (defaults)
+    const char *sent; // X-Pairing-Key header, nullptr = none
+  };
+  auto run = [](int port, const Case &c) {
+    c.key ? setenv("HEALER_PAIRING_KEY", c.key, 1) : unsetenv("HEALER_PAIRING_KEY");
+    c.nets ? setenv("HEALER_PIN_TRUSTED_NETS", c.nets, 1) : unsetenv("HEALER_PIN_TRUSTED_NETS");
+
+    auto app_state = immer::box<state::AppState>(state::AppState{
+        .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+        .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+        .event_bus = std::make_shared<events::EventBusType>()});
+    HttpServer server;
+    std::thread server_thread([&] { HTTPServers::startServer(&server, app_state, port); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300)); // Wait for the server to start
+
+    auto curl = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>(curl_easy_init(), curl_easy_cleanup);
+    curl_easy_setopt(curl.get(), CURLOPT_URL, fmt::format("http://127.0.0.1:{}/pin/pending", port).c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 5L);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, +[](char *, size_t s, size_t n, void *) { return s * n; });
+    curl_slist *headers = nullptr;
+    if (c.sent) {
+      headers = curl_slist_append(headers, fmt::format("X-Pairing-Key: {}", c.sent).c_str());
+      curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers);
+    }
+    long status = 0;
+    if (curl_easy_perform(curl.get()) == CURLE_OK) {
+      curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &status);
+    }
+    curl_slist_free_all(headers);
+
+    server.stop();
+    server_thread.join();
+    return status;
+  };
+
+  // No key, defaults: loopback is untrusted so the list stays disabled
+  REQUIRE(run(47793, {nullptr, nullptr, nullptr}) == 403);
+  // Key set: required, and a wrong one is rejected
+  REQUIRE(run(47794, {"secret", nullptr, nullptr}) == 401);
+  REQUIRE(run(47795, {"secret", nullptr, "wrong"}) == 401);
+  REQUIRE(run(47796, {"secret", nullptr, "secret"}) == 200);
+  // Loopback made trusted: no key needed at all, even when none is configured
+  REQUIRE(run(47797, {nullptr, "127.0.0.0/8", nullptr}) == 200);
+  REQUIRE(run(47798, {"secret", "127.0.0.0/8", nullptr}) == 200);
+  // A trusted list that does not include the client changes nothing
+  REQUIRE(run(47799, {"secret", "10.0.0.0/8", nullptr}) == 401);
+  // Set but empty: nobody is trusted
+  REQUIRE(run(47800, {nullptr, "", nullptr}) == 403);
+
+  unsetenv("HEALER_PAIRING_KEY");
+  unsetenv("HEALER_PIN_TRUSTED_NETS");
 }
 
 TEST_CASE("Pairing PIN timeout", "[MoonlightProtocol]") {
