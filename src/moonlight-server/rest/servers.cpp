@@ -7,6 +7,7 @@
 #include <rest/pairing_key.hpp>
 #include <rest/pairing_webhook.hpp>
 #include <rest/preset_pin.hpp>
+#include <rest/trusted_nets.hpp>
 
 namespace HTTPServers {
 
@@ -117,39 +118,50 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
   // discover them without reading the server log for the one-shot /pin/#<secret> URL.
   // The list hands out the secrets needed to submit a PIN, so it requires the preset HEALER_PAIRING_KEY
   std::string expected_key = utils::get_env("HEALER_PAIRING_KEY", "");
-  if (expected_key.empty()) {
+  // Clients on these networks (LAN / VPN) can use the page without the key, see trusted_nets.hpp
+  auto trusted = std::make_shared<const std::vector<trusted_nets::Net>>(
+      trusted_nets::from_env(utils::get_env("HEALER_PIN_TRUSTED_NETS")));
+  if (expected_key.empty() && trusted->empty()) {
     logs::log(logs::info, "PIN landing page disabled, set HEALER_PAIRING_KEY to enable it at /pin/");
+  } else if (expected_key.empty()) {
+    logs::log(logs::info,
+              "PIN landing page open to trusted networks only (HEALER_PIN_TRUSTED_NETS), set HEALER_PAIRING_KEY to "
+              "also allow other networks");
   }
   auto key_attempts = std::make_shared<immer::atom<pairing_key::AttemptsMap>>();
-  server->resource["^/pin/pending$"]["GET"] = [pairing_atom, expected_key, key_attempts](auto resp, auto req) {
+  server->resource["^/pin/pending$"]["GET"] = [pairing_atom, expected_key, key_attempts, trusted](auto resp, auto req) {
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "application/json");
-    if (expected_key.empty()) {
-      resp->write(SimpleWeb::StatusCode::client_error_forbidden, R"({"error":"disabled"})", headers);
-      return;
-    }
 
-    auto client_ip = req->remote_endpoint().address().to_string();
-    auto provided = get_header(req->header, "X-Pairing-Key").value_or("");
-    if (provided.empty()) { // Not a guess: the page asks for the key, doesn't count towards the lockout
-      resp->write(SimpleWeb::StatusCode::client_error_unauthorized, R"({"error":"key_required"})", headers);
-      return;
-    }
-    auto result = pairing_key::Result::WRONG_KEY;
-    key_attempts->update([&](const pairing_key::AttemptsMap &attempts) {
-      auto [check_result, updated] =
-          pairing_key::check(attempts, client_ip, provided, expected_key, pairing_key::clock::now());
-      result = check_result;
-      return updated;
-    });
-    if (result == pairing_key::Result::LOCKED_OUT) {
-      logs::log(logs::warning, "[PIN] Too many wrong pairing keys from {}, locked out", client_ip);
-      resp->write(SimpleWeb::StatusCode::client_error_too_many_requests, R"({"error":"locked_out"})", headers);
-      return;
-    } else if (result == pairing_key::Result::WRONG_KEY) {
-      logs::log(logs::warning, "[PIN] Wrong pairing key from {}", client_ip);
-      resp->write(SimpleWeb::StatusCode::client_error_unauthorized, R"({"error":"wrong_key"})", headers);
-      return;
+    // The TCP peer only, never a header the client could set; trusted networks skip the key entirely
+    if (!trusted_nets::is_trusted(req->remote_endpoint().address(), *trusted)) {
+      if (expected_key.empty()) {
+        resp->write(SimpleWeb::StatusCode::client_error_forbidden, R"({"error":"disabled"})", headers);
+        return;
+      }
+
+      auto client_ip = req->remote_endpoint().address().to_string();
+      auto provided = get_header(req->header, "X-Pairing-Key").value_or("");
+      if (provided.empty()) { // Not a guess: the page asks for the key, doesn't count towards the lockout
+        resp->write(SimpleWeb::StatusCode::client_error_unauthorized, R"({"error":"key_required"})", headers);
+        return;
+      }
+      auto result = pairing_key::Result::WRONG_KEY;
+      key_attempts->update([&](const pairing_key::AttemptsMap &attempts) {
+        auto [check_result, updated] =
+            pairing_key::check(attempts, client_ip, provided, expected_key, pairing_key::clock::now());
+        result = check_result;
+        return updated;
+      });
+      if (result == pairing_key::Result::LOCKED_OUT) {
+        logs::log(logs::warning, "[PIN] Too many wrong pairing keys from {}, locked out", client_ip);
+        resp->write(SimpleWeb::StatusCode::client_error_too_many_requests, R"({"error":"locked_out"})", headers);
+        return;
+      } else if (result == pairing_key::Result::WRONG_KEY) {
+        logs::log(logs::warning, "[PIN] Wrong pairing key from {}", client_ip);
+        resp->write(SimpleWeb::StatusCode::client_error_unauthorized, R"({"error":"wrong_key"})", headers);
+        return;
+      }
     }
 
     std::string body = R"({"requests":[)";

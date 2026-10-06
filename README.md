@@ -90,7 +90,8 @@ docker run \
 Then pair a Moonlight client:
 
 1. Add your host in Moonlight, it shows a 4-digit PIN
-2. Open `http://heeler:47989/pin/` (`heeler` being your server's hostname), unlock it with your `HEALER_PAIRING_KEY`
+2. Open `http://heeler:47989/pin/` (`heeler` being your server's hostname). From your home network or Tailscale it
+   opens straight away; from any other network unlock it with your `HEALER_PAIRING_KEY`
    (or bookmark `http://heeler:47989/pin/#key=<your key>` to unlock it automatically, it stays open waiting for devices)
 3. Type the PIN next to the device that's waiting, and start playing
 
@@ -102,7 +103,8 @@ PrismLauncher, Firefox, ...) come from [games-on-whales/gow](https://github.com/
 
 | Variable                  | What it does                                                                                   |
 |---------------------------|------------------------------------------------------------------------------------------------|
-| `HEALER_PAIRING_KEY`      | Admin key for the PIN page (without it, only the one-time link in the log works)               |
+| `HEALER_PAIRING_KEY`      | Admin key for the PIN page from networks that are not trusted (see `HEALER_PIN_TRUSTED_NETS`)   |
+| `HEALER_PIN_TRUSTED_NETS` | Networks that can use the PIN page without the key; default: LAN + Tailscale (see the docs)      |
 | `HEALER_PAIRING_WEBHOOK`  | URL that gets the PIN page link whenever a device starts pairing                               |
 | `HEALER_PAIRING_PIN`      | Fixed 4-digit PIN for clients that let you choose one; rate limited, meant for temporary use   |
 | `HEALER_RENDER_NODE`      | Default GPU (`/dev/dri/renderD128`); apps can pick their own with `render_node` in `config.toml` |
