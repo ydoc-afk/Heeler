@@ -21,3 +21,6 @@ Cargo.lock
 build/
 .clj-kondo
 .lsp
+
+# Generated from config.v7.toml at configure time (make_includable)
+src/moonlight-server/state/default/config.include.toml
