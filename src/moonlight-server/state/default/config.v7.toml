@@ -323,9 +323,10 @@ env = ['GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*']
 devices = []
 # NOTICE: Heeler ships NO keys, firmware or games. You must supply your own, dumped from a Switch console you
 # own, and you are responsible for complying with the law where you live. Nothing is downloaded for you.
-# Shared Switch data, managed in one place on the host:
-#   /home/codyw/switch/prod.keys, /home/codyw/switch/firmware/, /home/codyw/switch/games/
-mounts = ['/home/codyw/switch:/switch:ro']
+# To play, mount a host folder holding your Switch data (read-only) by editing the `mounts` line below, e.g.
+#   mounts = ['/path/to/switch:/switch:ro']
+# The folder must contain prod.keys, firmware/ and games/. Create it first, or Docker will create it empty.
+mounts = []
 ports = []
 base_create_json = """
 {
