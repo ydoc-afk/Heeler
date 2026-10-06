@@ -18,6 +18,13 @@ on:
 permissions:
   packages: write
 
+# One build at a time per branch/tag (queued, never cancelled mid-push) so a slower older build can't finish after
+# and overwrite the tags of a newer one. Scheduled/manual nightly runs share a group of their own, because they run
+# on the default branch's ref but build nightly.
+concurrency:
+  group: docker-build-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'nightly-manual' || github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # Scheduled runs only build when the nightly branch got new commits in the last day
   changes:
@@ -70,6 +77,7 @@ jobs:
           if [ "$NIGHTLY" = "true" ]; then CACHE_TAG=buildcache-nightly; fi
           echo "nightly=${NIGHTLY}" >> $GITHUB_OUTPUT
           echo "sha=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
+          echo "sha_full=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
           echo "has_github_token=true" >> $GITHUB_OUTPUT
           if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
             IMAGES="gameonwhales/wolf,${IMAGES}"
@@ -103,6 +111,9 @@ jobs:
             type=raw,value=nightly-{{date 'YYYYMMDD'}},enable=${{ steps.prep.outputs.nightly == 'true' }}
             type=raw,value=sha-${{ steps.prep.outputs.sha }},enable=${{ steps.prep.outputs.nightly == 'true' }}
           flavor: latest=false # let's not produce a :latest tag
+          # Scheduled/manual runs check out nightly, so the commit the workflow runs on isn't the one built
+          labels: |
+            org.opencontainers.image.revision=${{ steps.prep.outputs.sha_full }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
