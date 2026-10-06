@@ -5,9 +5,9 @@
 #include <netdb.h>
 #include <rest/endpoints.hpp>
 #include <rest/pairing_key.hpp>
-#include <rest/trusted_nets.hpp>
 #include <rest/pairing_webhook.hpp>
 #include <rest/preset_pin.hpp>
+#include <rest/trusted_nets.hpp>
 
 namespace HTTPServers {
 
@@ -129,8 +129,7 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
               "also allow other networks");
   }
   auto key_attempts = std::make_shared<immer::atom<pairing_key::AttemptsMap>>();
-  server->resource["^/pin/pending$"]["GET"] = [pairing_atom, expected_key, key_attempts, trusted](auto resp,
-                                                                                                    auto req) {
+  server->resource["^/pin/pending$"]["GET"] = [pairing_atom, expected_key, key_attempts, trusted](auto resp, auto req) {
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "application/json");
 

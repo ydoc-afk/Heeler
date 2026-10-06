@@ -54,7 +54,8 @@ inline boost::asio::ip::address normalize(const boost::asio::ip::address &addr) 
  * Same first `prefix_len` bits?
  */
 template <std::size_t N>
-inline bool prefix_matches(const std::array<unsigned char, N> &a, const std::array<unsigned char, N> &b, int prefix_len) {
+inline bool
+prefix_matches(const std::array<unsigned char, N> &a, const std::array<unsigned char, N> &b, int prefix_len) {
   for (std::size_t i = 0; i < N && prefix_len > 0; i++, prefix_len -= 8) {
     int bits = std::min(prefix_len, 8);
     auto mask = static_cast<unsigned char>(0xFF << (8 - bits));
