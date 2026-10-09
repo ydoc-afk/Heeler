@@ -61,10 +61,11 @@ video/x-raw, framerate={fps}/1
 [profiles.apps.audio]
 source = "audiotestsrc wave=ticks is-live=true"
 
-# An example profile that will be shown in our Wolf UI
+# The apps every new account starts with. It is not an account and is never listed: the first launch of the menu
+# asks you to create the first account, which gets a copy of these apps.
 [[profiles]]
-id = "user"
-name = "User"
+id = "new-account-template"
+name = "New account template"
 
 [[profiles.apps]]
 title = "Firefox"
