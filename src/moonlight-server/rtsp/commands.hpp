@@ -38,7 +38,7 @@ RTSP_PACKET ok_msg(int sequence_number,
 constexpr int DEFAULT_FEC_PERCENTAGE = 20;
 
 /**
- * Parses the FEC percentage override (HEALER_FEC_PERCENTAGE).
+ * Parses the FEC percentage override (HEELER_FEC_PERCENTAGE).
  * Returns DEFAULT_FEC_PERCENTAGE when the value is missing, not a number or outside 0..100
  * (the range accepted by rtpmoonlightpay_video).
  */
@@ -54,7 +54,7 @@ int parse_fec_percentage(const char *value) {
     }
   } catch (const std::exception &) {
   }
-  logs::log(logs::warning, "[RTSP] Invalid HEALER_FEC_PERCENTAGE '{}', using {}", value, DEFAULT_FEC_PERCENTAGE);
+  logs::log(logs::warning, "[RTSP] Invalid HEELER_FEC_PERCENTAGE '{}', using {}", value, DEFAULT_FEC_PERCENTAGE);
   return DEFAULT_FEC_PERCENTAGE;
 }
 
@@ -254,7 +254,7 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
   }
 
   auto audio_channels = args["x-nv-audio.surround.numChannels"].value_or(session.audio_channel_count);
-  auto fec_percentage = parse_fec_percentage(utils::get_env("HEALER_FEC_PERCENTAGE"));
+  auto fec_percentage = parse_fec_percentage(utils::get_env("HEELER_FEC_PERCENTAGE"));
 
   long bitrate = args["x-nv-vqos[0].bw.maximumBitrateKbps"].value_or(15500);
   // If the client sent a configured bitrate adjust it (Moonlight extension)

@@ -9,7 +9,7 @@
 #include <utility>
 
 /**
- * Optional preset pairing PIN (HEALER_PAIRING_PIN): pairing requests are answered with it right away,
+ * Optional preset pairing PIN (HEELER_PAIRING_PIN): pairing requests are answered with it right away,
  * for clients where the user can choose the PIN (ex: `moonlight pair <host> --pin 1234` with moonlight-qt).
  *
  * A 4 digit PIN can be guessed, so auto-answers are rate limited per client IP; past the limit the request falls
@@ -38,7 +38,7 @@ inline std::optional<std::string> parse(const char *value) {
   }
   std::string_view pin(value);
   if (pin.size() != 4 || pin.find_first_not_of("0123456789") != std::string_view::npos) {
-    logs::log(logs::warning, "Ignoring HEALER_PAIRING_PIN: it must be exactly 4 digits");
+    logs::log(logs::warning, "Ignoring HEELER_PAIRING_PIN: it must be exactly 4 digits");
     return std::nullopt;
   }
   return std::string(pin);

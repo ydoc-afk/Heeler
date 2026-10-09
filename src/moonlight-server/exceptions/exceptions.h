@@ -57,7 +57,7 @@ static std::unique_ptr<cpptrace::object_trace> load_stacktrace_from(const std::s
 }
 
 static std::string backtrace_file_src() {
-  return std::string(utils::get_env("HEALER_CFG_FOLDER", ".")) + "/backtrace.dump"s;
+  return std::string(utils::get_env("HEELER_CFG_FOLDER", ".")) + "/backtrace.dump"s;
 }
 
 /**
@@ -83,7 +83,7 @@ static void check_exceptions() {
     auto now = std::chrono::system_clock::now();
     std::filesystem::rename(
         stack_file,
-        fmt::format("{}/backtrace.{:%Y-%m-%d-%H-%M-%S}.dump", utils::get_env("HEALER_CFG_FOLDER", "."), now));
+        fmt::format("{}/backtrace.{:%Y-%m-%d-%H-%M-%S}.dump", utils::get_env("HEELER_CFG_FOLDER", "."), now));
   }
 }
 

@@ -13,7 +13,7 @@
 #include <vector>
 
 /**
- * Networks that may use the PIN landing page (GET /pin/pending) without the HEALER_PAIRING_KEY.
+ * Networks that may use the PIN landing page (GET /pin/pending) without the HEELER_PAIRING_KEY.
  *
  * Heeler is meant to run on a LAN or behind a VPN (ex: Tailscale), where "who can reach the port" is already the
  * access control, so asking for a second secret just to type the 4-digit PIN Moonlight shows is friction.
@@ -26,7 +26,7 @@
 namespace trusted_nets {
 
 /**
- * Used when HEALER_PIN_TRUSTED_NETS is unset: the private ranges plus Tailscale's CGNAT range.
+ * Used when HEELER_PIN_TRUSTED_NETS is unset: the private ranges plus Tailscale's CGNAT range.
  * (Tailscale's IPv6 range fd7a:115c:a1e0::/48 is inside the unique-local fc00::/7.)
  */
 constexpr std::string_view DEFAULT_NETS =
@@ -108,7 +108,7 @@ inline std::vector<Net> parse_list(std::string_view list) {
     if (auto net = parse_net(entry)) {
       nets.push_back(*net);
     } else {
-      logs::log(logs::warning, "Ignoring invalid entry in HEALER_PIN_TRUSTED_NETS: {}", entry);
+      logs::log(logs::warning, "Ignoring invalid entry in HEELER_PIN_TRUSTED_NETS: {}", entry);
     }
     list = end == std::string_view::npos ? std::string_view{} : list.substr(end);
   }
@@ -116,7 +116,7 @@ inline std::vector<Net> parse_list(std::string_view list) {
 }
 
 /**
- * HEALER_PIN_TRUSTED_NETS: unset -> the defaults, set but empty -> nobody is trusted (the key is always required)
+ * HEELER_PIN_TRUSTED_NETS: unset -> the defaults, set but empty -> nobody is trusted (the key is always required)
  */
 inline std::vector<Net> from_env(const char *value) {
   return parse_list(value == nullptr ? DEFAULT_NETS : std::string_view(value));

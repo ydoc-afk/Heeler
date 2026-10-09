@@ -66,8 +66,8 @@ public:
           })                                                                                         //
         | ranges::to_vector;                                                                         //
 
-    auto docker_socket = utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock");
-    auto docker_config = utils::get_env("HEALER_DOCKER_CONFIG", "");
+    auto docker_socket = utils::get_env("HEELER_DOCKER_SOCKET", "/var/run/docker.sock");
+    auto docker_config = utils::get_env("HEELER_DOCKER_CONFIG", "");
     return RunDocker(std::move(ev_bus),
                      runner_cfg.base_create_json.value_or(R"({
 "HostConfig": {

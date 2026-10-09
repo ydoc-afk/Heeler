@@ -18,7 +18,7 @@ namespace wolf::core::sessions {
  */
 static bool prepare_library_folder(
     const std::string &library, const std::string &image, uint uid, uint gid, const std::string &session_id) {
-  auto docker_socket = utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock");
+  auto docker_socket = utils::get_env("HEELER_DOCKER_SOCKET", "/var/run/docker.sock");
   docker::DockerAPI api(docker_socket);
   auto script = fmt::format("mkdir -p /library/steamapps && chown {}:{} /library/steamapps", uid, gid);
   auto options =
@@ -47,7 +47,7 @@ static bool prepare_library_folder(
 }
 
 /**
- * Mounts the shared Steam library (HEALER_STEAM_LIBRARY) into a Steam container and lists it in the account's
+ * Mounts the shared Steam library (HEELER_STEAM_LIBRARY) into a Steam container and lists it in the account's
  * libraryfolders.vdf, so every account installs into, and plays from, the same folder.
  * The Proton prefixes (compatdata) stay per account.
  */

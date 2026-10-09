@@ -63,7 +63,7 @@ void RunDocker::run(std::string_view session_id,
   // Fake udev
   auto udev_base_path = std::filesystem::path(app_state_folder) / "udev";
   auto hw_db_path = udev_base_path / "data";
-  auto fake_udev_cli_path = std::string(utils::get_env("HEALER_DOCKER_FAKE_UDEV_PATH", ""));
+  auto fake_udev_cli_path = std::string(utils::get_env("HEELER_DOCKER_FAKE_UDEV_PATH", ""));
   bool use_fake_udev = !fake_udev_cli_path.empty();
   if (use_fake_udev) {
     logs::log(logs::debug, "[DOCKER] Using fake-udev, creating {}", hw_db_path.string());
@@ -79,7 +79,7 @@ void RunDocker::run(std::string_view session_id,
     }
   } else {
     logs::log(logs::warning,
-              "[DOCKER] Unable to use fake-udev, check env var HEALER_DOCKER_FAKE_UDEV_PATH and the file at {}",
+              "[DOCKER] Unable to use fake-udev, check env var HEELER_DOCKER_FAKE_UDEV_PATH and the file at {}",
               fake_udev_cli_path);
   }
 
@@ -141,7 +141,7 @@ void RunDocker::run(std::string_view session_id,
   // mount. Proton looks for them in nvidia/wine/ next to libGLX_nvidia.so.0, so expose the host's copy there.
   // Heeler can't see the host filesystem, so the folder has to be given: "host_dir" or "host_dir:container_dir".
   if (get_vendor(render_node) == NVIDIA) {
-    if (auto wine_dir = utils::get_env("HEALER_NVIDIA_WINE_DIR"); wine_dir && *wine_dir) {
+    if (auto wine_dir = utils::get_env("HEELER_NVIDIA_WINE_DIR"); wine_dir && *wine_dir) {
       std::string_view dir = wine_dir;
       auto sep = dir.find(':');
       auto source = utils::to_string(dir.substr(0, sep));
@@ -319,7 +319,7 @@ void RunDocker::run(std::string_view session_id,
         .session_id = std::string(session_id),
     }});
 
-    if (const auto env = utils::get_env("HEALER_STOP_CONTAINER_ON_EXIT")) {
+    if (const auto env = utils::get_env("HEELER_STOP_CONTAINER_ON_EXIT")) {
       if (std::string(env) == "TRUE") {
         docker_api.stop_by_id(container_id);
         docker_api.remove_by_id(container_id);

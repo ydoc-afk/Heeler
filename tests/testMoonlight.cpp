@@ -705,11 +705,10 @@ TEST_CASE("Resume stops the stream that is still running", "[HTTP]") {
 
 TEST_CASE("HTTP /unpair input validation", "[HTTP]") {
   // /unpair is unauthenticated: malformed requests must get an error reply, never take the server down
-  auto app_state = immer::box<state::AppState>(
-      state::AppState{.pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
-                      .pairing_atom = std::make_shared<
-                          immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
-                      .event_bus = std::make_shared<events::EventBusType>()});
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = std::make_shared<events::EventBusType>()});
 
   constexpr int port = 47790;
   HttpServer server;
@@ -887,13 +886,13 @@ TEST_CASE("Trusted networks", "[PAIRING]") {
 TEST_CASE("HTTP PIN list needs the key outside trusted networks", "[HTTP]") {
   // The test client connects from 127.0.0.1, which is not trusted by default
   struct Case {
-    const char *key;  // HEALER_PAIRING_KEY, nullptr = unset
-    const char *nets; // HEALER_PIN_TRUSTED_NETS, nullptr = unset (defaults)
+    const char *key;  // HEELER_PAIRING_KEY, nullptr = unset
+    const char *nets; // HEELER_PIN_TRUSTED_NETS, nullptr = unset (defaults)
     const char *sent; // X-Pairing-Key header, nullptr = none
   };
   auto run = [](int port, const Case &c) {
-    c.key ? setenv("HEALER_PAIRING_KEY", c.key, 1) : unsetenv("HEALER_PAIRING_KEY");
-    c.nets ? setenv("HEALER_PIN_TRUSTED_NETS", c.nets, 1) : unsetenv("HEALER_PIN_TRUSTED_NETS");
+    c.key ? setenv("HEELER_PAIRING_KEY", c.key, 1) : unsetenv("HEELER_PAIRING_KEY");
+    c.nets ? setenv("HEELER_PIN_TRUSTED_NETS", c.nets, 1) : unsetenv("HEELER_PIN_TRUSTED_NETS");
 
     auto app_state = immer::box<state::AppState>(state::AppState{
         .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
@@ -937,8 +936,8 @@ TEST_CASE("HTTP PIN list needs the key outside trusted networks", "[HTTP]") {
   // Set but empty: nobody is trusted
   REQUIRE(run(47800, {nullptr, "", nullptr}) == 403);
 
-  unsetenv("HEALER_PAIRING_KEY");
-  unsetenv("HEALER_PIN_TRUSTED_NETS");
+  unsetenv("HEELER_PAIRING_KEY");
+  unsetenv("HEELER_PIN_TRUSTED_NETS");
 }
 
 TEST_CASE("Pairing PIN timeout", "[MoonlightProtocol]") {
@@ -956,13 +955,8 @@ TEST_CASE("Pairing PIN timeout", "[MoonlightProtocol]") {
         pairing_atom->update([&signal](const auto &m) { return m.set("secret", signal); });
       });
 
-  auto phase_1 = endpoints::pair_phase1(app_state,
-                                        "0.0.0.0",
-                                        "1.1.1.1",
-                                        "",
-                                        "",
-                                        "1234@0.0.0.0",
-                                        std::chrono::milliseconds(200));
+  auto phase_1 =
+      endpoints::pair_phase1(app_state, "0.0.0.0", "1.1.1.1", "", "", "1234@0.0.0.0", std::chrono::milliseconds(200));
   REQUIRE(app_state->pairing_atom->load()->size() == 1);
 
   auto result = phase_1->get_future().get(); // must not block forever
@@ -1001,9 +995,8 @@ TEST_CASE("Stream is stopped when the client never sends the RTP ping", "[Moonli
   auto event_bus = std::make_shared<events::EventBusType>();
   auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
   auto config = state::load_or_default("config.test.toml", event_bus, running_sessions);
-  auto app_state = immer::box<state::AppState>(state::AppState{.config = {config},
-                                                               .event_bus = event_bus,
-                                                               .running_sessions = running_sessions});
+  auto app_state = immer::box<state::AppState>(
+      state::AppState{.config = {config}, .event_bus = event_bus, .running_sessions = running_sessions});
   auto handlers = wolf::core::sessions::setup_moonlight_handlers(app_state, "/tmp", std::nullopt);
 
   auto stopped = std::make_shared<std::promise<std::size_t>>();
@@ -1031,18 +1024,18 @@ TEST_CASE("Stream is stopped when the client never sends the RTP ping", "[Moonli
 TEST_CASE("Ports can be overridden by env vars", "[LocalState]") {
   REQUIRE(state::get_port(state::HTTP_PORT) == state::HTTP_PORT);
 
-  setenv("HEALER_HTTP_PORT", "12345", 1);
+  setenv("HEELER_HTTP_PORT", "12345", 1);
   REQUIRE(state::get_port(state::HTTP_PORT) == 12345);
 
   // A typo must not throw (this runs at startup): fall back to the default
-  setenv("HEALER_HTTP_PORT", "not-a-port", 1);
+  setenv("HEELER_HTTP_PORT", "not-a-port", 1);
   REQUIRE(state::get_port(state::HTTP_PORT) == state::HTTP_PORT);
 
-  unsetenv("HEALER_HTTP_PORT");
+  unsetenv("HEELER_HTTP_PORT");
 }
 
 TEST_CASE("Per-app encoder GPU", "[LocalState]") {
-  auto default_node = std::string(utils::get_env("HEALER_ENCODER_NODE", "/dev/dri/renderD128"));
+  auto default_node = std::string(utils::get_env("HEELER_ENCODER_NODE", "/dev/dri/renderD128"));
   // Stand-in for a second GPU: another path to the default one. Without a GPU (CI) it's a dangling link.
   auto gpu_alias = (std::filesystem::temp_directory_path() / "heeler-test-gpu-alias").string();
   std::filesystem::remove(gpu_alias);
@@ -1117,7 +1110,7 @@ run_cmd = "true"
   REQUIRE(apps.at(4)->encoder_render_node == default_node);
 
   // encoder_render_node alone
-  REQUIRE(apps.at(5)->render_node == std::string(utils::get_env("HEALER_RENDER_NODE", "/dev/dri/renderD128")));
+  REQUIRE(apps.at(5)->render_node == std::string(utils::get_env("HEELER_RENDER_NODE", "/dev/dri/renderD128")));
   REQUIRE(apps.at(5)->encoder_render_node == (has_gpu ? gpu_alias : default_node));
 }
 
@@ -1149,12 +1142,11 @@ TEST_CASE("Preset pairing PIN", "[PAIRING]") {
 }
 
 TEST_CASE("HTTP server answers pairing with the preset PIN", "[HTTP]") {
-  setenv("HEALER_PAIRING_PIN", "4321", 1);
-  auto app_state = immer::box<state::AppState>(
-      state::AppState{.pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
-                      .pairing_atom = std::make_shared<
-                          immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
-                      .event_bus = std::make_shared<events::EventBusType>()});
+  setenv("HEELER_PAIRING_PIN", "4321", 1);
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = std::make_shared<events::EventBusType>()});
 
   constexpr int port = 47791;
   HttpServer server;
@@ -1183,5 +1175,5 @@ TEST_CASE("HTTP server answers pairing with the preset PIN", "[HTTP]") {
 
   server.stop();
   server_thread.join();
-  unsetenv("HEALER_PAIRING_PIN");
+  unsetenv("HEELER_PAIRING_PIN");
 }

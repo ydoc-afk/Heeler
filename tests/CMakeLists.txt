@@ -119,4 +119,4 @@ include(CTest)
 include(Catch)
 catch_discover_tests(wolftests
         PROPERTIES
-        ENVIRONMENT "HEALER_SKIP_WAYLAND_SOCKET_WAIT=TRUE")
+        ENVIRONMENT "HEELER_SKIP_WAYLAND_SOCKET_WAIT=TRUE")
