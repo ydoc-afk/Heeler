@@ -151,7 +151,9 @@ void init_admin(const Config &cfg) {
   AdminState admin{.profile_id = tml.admin ? tml.admin->profile_id : std::nullopt,
                    .password_hash = tml.admin ? tml.admin->password_hash : std::nullopt};
 
-  auto changed = false;
+  // Only a password reset is written back at start. The admin account picked below is worked out again on every
+  // start, so config.toml is not rewritten (and its comments lost) just by starting Heeler.
+  auto persist = false;
 
   // Installs from before the admin existed: the first account is the admin
   auto profiles = cfg.profiles->load();
@@ -163,7 +165,6 @@ void init_admin(const Config &cfg) {
   if (admin.profile_id && !exists(*admin.profile_id)) {
     logs::log(logs::warning, "The admin account '{}' no longer exists", *admin.profile_id);
     admin.profile_id = std::nullopt;
-    changed = true;
   }
   if (!admin.profile_id) {
     auto first = std::find_if(profiles->begin(), profiles->end(), [](const immer::box<events::Profile> &p) {
@@ -171,7 +172,6 @@ void init_admin(const Config &cfg) {
     });
     if (first != profiles->end()) {
       admin.profile_id = (*first)->id;
-      changed = true;
       logs::log(logs::info, "The account '{}' is the admin", (*first)->id);
     }
   }
@@ -181,12 +181,12 @@ void init_admin(const Config &cfg) {
     std::filesystem::remove(reset_file, ec);
     if (admin.password_hash) {
       admin.password_hash = std::nullopt;
-      changed = true;
+      persist = true;
       logs::log(logs::warning, "The web admin password was reset ({} was found)", reset_file.string());
     }
   }
 
-  if (changed)
+  if (persist)
     update_admin(cfg, admin);
   else
     cfg.admin->store(admin);
