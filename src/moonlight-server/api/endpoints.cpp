@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <api/api.hpp>
 #include <control/input_handler.hpp>
 #include <core/docker.hpp>
@@ -195,7 +196,8 @@ void UnixSocketServer::endpoint_Profiles(const HTTPRequest &req, std::shared_ptr
   auto res = ProfileListResponse{.success = true,
                                  .profiles = profiles | //
                                              ranges::views::filter([](const immer::box<events::Profile> &p) {
-                                               return p->id != events::MOONLIGHT_PROFILE_ID;
+                                               return p->id != events::MOONLIGHT_PROFILE_ID &&
+                                                      p->id != events::TEMPLATE_PROFILE_ID;
                                              }) |                                                              //
                                              ranges::views::transform(rfl::Reflector<events::Profile>::from) | //
                                              ranges::to_vector};
@@ -208,7 +210,34 @@ void UnixSocketServer::endpoint_AddProfile(const HTTPRequest &req, std::shared_p
     auto p = profile_req.value();
 
     auto profiles = state_->app_state->config->profiles->load().get();
+
+    auto reserved = p.id == events::MOONLIGHT_PROFILE_ID || p.id == events::TEMPLATE_PROFILE_ID;
+    auto taken = std::any_of(profiles.begin(), profiles.end(), [&](const immer::box<events::Profile> &e) {
+      return e->id == p.id;
+    });
+    if (p.id.empty() || p.name.empty() || reserved || taken) {
+      logs::log(logs::warning, "[API] Rejected profile with id '{}' and name '{}'", p.id, p.name);
+      auto res = GenericErrorResponse{.error = "A profile needs a name and an unused id"};
+      send_http(socket, 400, rfl::json::write(res));
+      return;
+    }
+
     auto new_profile = rfl::Reflector<events::Profile>::to(p, this->state_->app_state->event_bus);
+    if (new_profile.apps->load()->empty()) {
+      // A new account with no apps of its own starts with the template's apps, or else a copy of the first
+      // account's (installs from before the template existed)
+      auto source = std::find_if(profiles.begin(), profiles.end(), [](const immer::box<events::Profile> &e) {
+        return e->id == events::TEMPLATE_PROFILE_ID;
+      });
+      if (source == profiles.end())
+        source = std::find_if(profiles.begin(), profiles.end(), [](const immer::box<events::Profile> &e) {
+          return e->id != events::MOONLIGHT_PROFILE_ID;
+        });
+      if (source != profiles.end()) {
+        auto source_apps = (*source)->apps->load();
+        new_profile.apps->update([&](const auto &) { return source_apps.get(); });
+      }
+    }
     new_profile.apps->update([&](const auto &apps) {
       return apps | //
              ranges::views::transform([&](const immer::box<events::App> &app) {

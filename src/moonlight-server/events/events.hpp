@@ -103,6 +103,11 @@ struct Profile {
  */
 constexpr std::string_view MOONLIGHT_PROFILE_ID = "moonlight-profile-id";
 
+/**
+ * Hidden profile that holds the apps every new account starts with. It is never listed as an account.
+ */
+constexpr std::string_view TEMPLATE_PROFILE_ID = "new-account-template";
+
 struct Lobby {
   const std::string id;
   const std::string name;

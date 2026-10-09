@@ -74,6 +74,12 @@ id = "user"
 name = "User"
 apps = []
 
+# Never listed as an account, only copied from when an account is created without apps
+[[profiles]]
+id = "new-account-template"
+name = "New account template"
+apps = []
+
 [gstreamer]
 
 [gstreamer.video]

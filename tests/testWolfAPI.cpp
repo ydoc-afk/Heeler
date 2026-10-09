@@ -392,6 +392,26 @@ TEST_CASE("Profile APIs", "[API]") {
     REQUIRE(profiles.value().profiles.size() == 1);
     REQUIRE_THAT(profiles.value().profiles[0].name, Equals("User"));
   }
+
+  // Test that a profile needs a name and an id nobody else uses
+  for (const auto &body : {R"({"id":"user","name":"Again","icon_png_path":"","apps":[]})",
+                           R"({"id":"","name":"No id","icon_png_path":"","apps":[]})",
+                           R"({"id":"nameless","name":"","icon_png_path":"","apps":[]})",
+                           R"({"id":"new-account-template","name":"Sneaky","icon_png_path":"","apps":[]})",
+                           R"({"id":"moonlight-profile-id","name":"Sneaky","icon_png_path":"","apps":[]})"}) {
+    auto response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/profiles/add", body);
+    REQUIRE(response);
+    REQUIRE_THAT(response->second, Catch::Matchers::ContainsSubstring("error"));
+  }
+
+  // Test that the list is unchanged: the hidden template never shows up as an account
+  {
+    auto response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/profiles");
+    REQUIRE(response);
+    auto profiles = rfl::json::read<ProfileListResponse>(response->second);
+    REQUIRE(profiles);
+    REQUIRE(profiles.value().profiles.size() == 1);
+  }
 }
 
 TEST_CASE("Sessions APIs", "[API]") {
@@ -758,8 +778,9 @@ TEST_CASE("Utils APIs", "[API]") {
 
   { // Arbitrary files and URLs must be refused (no local file read / SSRF through the API)
     for (auto icon_path : {"/etc/passwd", "../../etc/passwd", "http://169.254.169.254/latest/meta-data/"}) {
-      auto response =
-          req(curl.get(), HTTPMethod::GET, fmt::format("http://localhost/api/v1/utils/get-icon?icon_path={}", icon_path));
+      auto response = req(curl.get(),
+                          HTTPMethod::GET,
+                          fmt::format("http://localhost/api/v1/utils/get-icon?icon_path={}", icon_path));
       REQUIRE(response);
       REQUIRE(response->first == 403);
     }
@@ -876,8 +897,7 @@ TEST_CASE("API survives malformed requests", "[API]") {
   curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 5L);
 
   SECTION("A non numeric Content-Length is answered with a 400") {
-    auto reply = raw_api_request(socket_path,
-                                 "POST /api/v1/pair HTTP/1.0\r\nContent-Length: not-a-number\r\n\r\n{}");
+    auto reply = raw_api_request(socket_path, "POST /api/v1/pair HTTP/1.0\r\nContent-Length: not-a-number\r\n\r\n{}");
     REQUIRE_THAT(reply, ContainsSubstring("HTTP/1.0 400 Bad Request"));
   }
 
