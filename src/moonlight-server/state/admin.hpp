@@ -5,7 +5,7 @@
 
 namespace state {
 
-/** PBKDF2-HMAC-SHA256 with a random salt. Returns "pbkdf2-sha256$iterations$salt$hash" (hex). */
+/** PBKDF2-HMAC-SHA256 with a random salt (600k rounds). Returns "pbkdf2-sha256$iterations$salt$hash" (hex). */
 std::string hash_password(const std::string &password);
 
 /** Constant-time check of a password against a hash made by hash_password. False for anything malformed. */
