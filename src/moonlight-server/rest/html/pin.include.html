@@ -324,7 +324,7 @@ R"for_c++_include(
                 pairingKey = "";
                 saveKey("");
                 showKeyForm(hadKey ? "Wrong pairing key. It is the HEALER_PAIRING_KEY value; check for typos (it is case-sensitive)." :
-                    "Enter the pairing key (HEALER_PAIRING_KEY) to see the devices waiting to pair.");
+                    "This network is not trusted by Heeler, enter the pairing key (HEALER_PAIRING_KEY) to see the devices waiting to pair.");
                 return;
             }
             if (xhr.status === 429) {
@@ -335,8 +335,8 @@ R"for_c++_include(
             }
             if (xhr.status === 403) {
                 stopPolling();
-                setHint("The device list is disabled on this server: set HEALER_PAIRING_KEY to enable it, " +
-                    "or open the link printed in the server log.");
+                setHint("The device list is only available from trusted networks (HEALER_PIN_TRUSTED_NETS): set HEALER_PAIRING_KEY " +
+                    "to enable it from here, or open the link printed in the server log.");
                 return;
             }
             if (xhr.status !== 200) return;
