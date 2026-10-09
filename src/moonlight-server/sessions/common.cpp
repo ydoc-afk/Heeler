@@ -1,10 +1,70 @@
+#include <fstream>
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <platforms/hw.hpp>
 #include <sessions/common.hpp>
 #include <sessions/handlers.hpp>
+#include <sstream>
+#include <state/steam-library.hpp>
+#include <unistd.h>
 
 namespace wolf::core::sessions {
+
+/**
+ * Mounts the shared Steam library (HEALER_STEAM_LIBRARY) into a Steam container and lists it in the account's
+ * libraryfolders.vdf, so every account installs into, and plays from, the same folder.
+ * The Proton prefixes (compatdata) stay per account.
+ */
+static void mount_steam_library(const std::string &library,
+                                const RunnerArgs &args,
+                                immer::array_transient<std::pair<std::string, std::string>> &mounted_paths) {
+  namespace fs = std::filesystem;
+  const auto uid = static_cast<uid_t>(args.client_settings->run_uid);
+  const auto gid = static_cast<gid_t>(args.client_settings->run_gid);
+  const auto mount = std::string{state::STEAM_LIBRARY_MOUNT};
+  std::error_code ec;
+
+  // Saves that live in a Proton prefix must not be shared between accounts
+  auto compatdata_local = fs::path(args.app_local_state_folder) / state::STEAM_COMPATDATA_STATE_DIR;
+  fs::create_directories(compatdata_local, ec);
+  if (ec || chown(compatdata_local.c_str(), uid, gid) != 0) {
+    logs::log(logs::warning,
+              "[STEAM_LIBRARY] Can't prepare {}, not using the shared library",
+              compatdata_local.string());
+    return;
+  }
+
+  // Tell Steam about the library. Folders are created one by one because only $HOME itself is handed to the user.
+  auto dir = fs::path(args.app_local_state_folder);
+  for (const char *part : {".local", "share", "Steam", "config"}) {
+    dir /= part;
+    if (!fs::exists(dir, ec)) {
+      fs::create_directory(dir, ec);
+      if (chown(dir.c_str(), uid, gid) != 0) {
+        logs::log(logs::warning, "[STEAM_LIBRARY] Can't hand {} to the user", dir.string());
+      }
+    }
+  }
+  auto vdf_path = dir / "libraryfolders.vdf";
+  std::string vdf;
+  if (std::ifstream in{vdf_path}) {
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    vdf = buffer.str();
+  }
+  auto updated = state::add_library_folder(vdf, mount);
+  if (updated != vdf) {
+    std::ofstream{vdf_path, std::ios::trunc} << updated;
+    if (chown(vdf_path.c_str(), uid, gid) != 0) {
+      logs::log(logs::warning, "[STEAM_LIBRARY] Can't hand {} to the user", vdf_path.string());
+    }
+  }
+
+  mounted_paths.push_back({library, mount});
+  mounted_paths.push_back({(fs::path(args.app_host_state_folder) / state::STEAM_COMPATDATA_STATE_DIR).string(),
+                           mount + "/steamapps/compatdata"});
+  logs::log(logs::info, "[STEAM_LIBRARY] Using {} as the shared Steam library", library);
+}
 
 void start_runner(std::shared_ptr<events::Runner> runner,
                   std::shared_ptr<events::devices_atom_queue> plugged_devices_queue,
@@ -53,6 +113,15 @@ void start_runner(std::shared_ptr<events::Runner> runner,
 
   /* Adding custom state folder */
   mounted_paths.push_back({args->app_host_state_folder, "/home/retro"});
+
+  /* Shared Steam library, for the Steam app only */
+  if (auto library = state::steam_library_from_env()) {
+    auto serialized = runner->serialize();
+    if (rfl::holds_alternative<wolf::config::AppDocker>(serialized.variant()) &&
+        state::is_steam_image(rfl::get<wolf::config::AppDocker>(serialized.variant()).image)) {
+      mount_steam_library(*library, *args, mounted_paths);
+    }
+  }
 
   /* GPU specific adjustments */
   auto render_node = args->video_settings.runner_render_node;

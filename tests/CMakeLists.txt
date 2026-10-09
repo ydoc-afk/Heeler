@@ -22,6 +22,7 @@ set(SRC_LIST
         testMoonlight.cpp
         testRTSP.cpp
         testAdmin.cpp
+        testSteamLibrary.cpp
         testWolfAPI.cpp
         testBatchedSend.cpp
         testUtils.cpp

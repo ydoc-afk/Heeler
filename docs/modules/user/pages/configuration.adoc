@@ -665,3 +665,29 @@ passwords are rate limited: after five misses the API answers `429` for a growin
 
 Forgot the password? Create an empty file called `reset-admin-password` next to `config.toml` and restart Heeler.
 The password is cleared and a new setup code is shown.
+
+== One Steam library for every account
+
+By default each account has its own Steam, so four accounts that all play the same game download it four times.
+Set `HEALER_STEAM_LIBRARY` on the Heeler container to a folder on the host and every Steam container uses that folder as
+a shared library: games download once, whichever account starts the download.
+
+[source,yaml]
+----
+environment:
+  - HEALER_STEAM_LIBRARY=/mnt/games/steam-library
+----
+
+* The value must be an absolute host path (Heeler does not expand `~` or `$HOME`). Create the folder first and make it
+writable by the user the apps run as (`HEALER_DEFAULT_RUN_UID` / `HEALER_DEFAULT_RUN_GID`, 1000 by default).
+* It applies to the Steam app only (an app whose Docker image name contains `steam`).
+* On start Heeler mounts the folder at `/steam-library` and adds it to the account's `libraryfolders.vdf`. In Steam it
+shows up under *Settings > Storage*; choose it when installing a game.
+* Files are shared, licences are not: an account can only play a game it owns, or has through Steam Family Sharing.
+* Proton prefixes (`steamapps/compatdata`), which hold saves that are not in the Steam cloud, stay **per account**.
+Heeler keeps each account's prefixes in its own state folder and mounts them over the library's `compatdata`.
+* Shader caches live in the library and are shared.
+* Don't install or update the same game from two accounts at the same time: Steam does not expect two clients writing
+to one library, and the second one only notices the first one's changes after it restarts.
+* Games that are already installed in an account's own library are not moved; install them again into the shared one,
+or move the folder by hand.
