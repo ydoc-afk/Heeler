@@ -166,6 +166,49 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
       });
 
   /**
+   * Admin API: who administers Heeler and the web admin password
+   */
+
+  state_->http.add(HTTPMethod::GET,
+                   "/api/v1/admin",
+                   {
+                       .summary = "Get the admin status",
+                       .description = "Who administers Heeler, whether the web password is set and whether the "
+                                      "one-time setup code can still be used.",
+                       .response_description = {{200, {.json_schema = rfl::json::to_schema<AdminStatusResponse>()}}},
+                       .handler = [this](auto req, auto socket) { endpoint_AdminStatus(req, socket); },
+                   });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/admin/setup",
+      {
+          .summary = "Set the web admin password",
+          .description = "Needs the one-time setup code from the log (or setup-code.txt next to config.toml) and works "
+                         "once, while no password is set. Wrong codes are rate limited.",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<AdminSetupRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {400, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}},
+                                   {403, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}},
+                                   {409, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}},
+                                   {429, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_AdminSetup(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/admin/login",
+      {
+          .summary = "Check the web admin password",
+          .description = "Wrong passwords are rate limited: after five misses the answer is 429 for a growing time.",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<AdminLoginRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {401, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}},
+                                   {429, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_AdminLogin(req, socket); },
+      });
+
+  /**
    * Stream session API
    */
 
@@ -402,10 +445,18 @@ void UnixSocketServer::send_http(std::shared_ptr<UnixSocket> socket,
       return "OK";
     case 400:
       return "Bad Request";
+    case 401:
+      return "Unauthorized";
+    case 403:
+      return "Forbidden";
     case 404:
       return "Not Found";
+    case 409:
+      return "Conflict";
     case 413:
       return "Payload Too Large";
+    case 429:
+      return "Too Many Requests";
     default:
       return status_code >= 500 ? "Internal Server Error" : "OK";
     }

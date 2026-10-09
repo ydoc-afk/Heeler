@@ -86,6 +86,18 @@ enum Encoder {
 /**
  * The stored (and user modifiable) configuration
  */
+/** Runtime view of config.toml's [admin] section */
+struct AdminState {
+  std::optional<std::string> profile_id;
+  std::optional<std::string> password_hash;
+};
+
+/** Slows down guessing of the setup code and the admin password */
+struct AdminLimiter {
+  int failures = 0;
+  std::chrono::steady_clock::time_point locked_until = {};
+};
+
 struct Config {
   std::string uuid;
   std::string hostname;
@@ -111,6 +123,19 @@ struct Config {
    * Profiles will be shown in WolfUI
    */
   std::shared_ptr<immer::atom<ProfilesList>> profiles;
+
+  /**
+   * The admin account and web password. Mutable, but changed only through the admin API.
+   */
+  std::shared_ptr<immer::atom<AdminState>> admin = std::make_shared<immer::atom<AdminState>>();
+
+  /**
+   * The one-time code that lets the first visitor of the web page set the admin password.
+   * Empty once the password is set. Never part of any API response.
+   */
+  std::shared_ptr<immer::atom<std::string>> setup_code = std::make_shared<immer::atom<std::string>>();
+
+  std::shared_ptr<immer::atom<AdminLimiter>> admin_limiter = std::make_shared<immer::atom<AdminLimiter>>();
 };
 
 /**

@@ -97,6 +97,25 @@ struct ProfileRemoveRequest {
   std::string id;
 };
 
+struct AdminStatusResponse {
+  bool success = true;
+  rfl::Description<"The account that administers Heeler. Empty until the first account is created",
+                   std::optional<std::string>>
+      admin_profile_id;
+  rfl::Description<"Whether the web admin password has been set", bool> password_set;
+  rfl::Description<"True while the one-time setup code can be used to set the password", bool> setup_required;
+};
+
+struct AdminSetupRequest {
+  rfl::Description<"The one-time setup code shown in the log and in setup-code.txt next to config.toml", std::string>
+      setup_code;
+  rfl::Description<"The new web admin password (at least 8 characters)", std::string> password;
+};
+
+struct AdminLoginRequest {
+  std::string password;
+};
+
 struct StreamSessionCreated {
   bool success = true;
   std::string session_id;
@@ -216,6 +235,10 @@ private:
   void endpoint_Profiles(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_AddProfile(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_RemoveProfile(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+
+  void endpoint_AdminStatus(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_AdminSetup(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_AdminLogin(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
   void endpoint_StreamSessions(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionAdd(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);

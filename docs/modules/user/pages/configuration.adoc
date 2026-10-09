@@ -230,14 +230,24 @@ id = 'moonlight-profile-id'
 ....
 
 Wolf UI is a special app that will be able to show you available profiles and lobbies directly from your Moonlight client.
-By default we create a single profile in our TOML file called `user`:
+A fresh install has no profiles. The first launch of the menu asks you to create the first account, and that account is the
+administrator. New accounts start with a copy of the apps in the hidden `new-account-template` profile, which is
+never listed as an account:
 
 [source,toml]
 ....
-# An example profile that will be shown in our Wolf UI
 [[profiles]]
-id = "user"
-name = "User"
+id = "new-account-template"
+name = "New account template"
+....
+
+Older installs keep their profiles, and the first one is the administrator. A profile looks like this:
+
+[source,toml]
+....
+[[profiles]]
+id = "alice"
+name = "Alice"
 
     [[profiles.apps]]
     title = "Firefox"
@@ -635,3 +645,23 @@ Rename the game to "Switch Layout".
 Close the properties window.
 
 You now have a clickable link in Steam to switch layouts.
+
+[#_admin]
+== The admin and the web admin password
+
+The first account created is the administrator, recorded in `config.toml`:
+
+[source,toml]
+....
+[admin]
+profile_id = "alice"
+password_hash = "pbkdf2-sha256$600000$..."  # set through the API, never edit by hand
+....
+
+While no web admin password is set, Heeler creates a one-time *setup code* at start. It is written to the log and to
+`setup-code.txt` next to `config.toml`. The web admin page asks for the code once, then for the password (at least 8
+characters), and the code stops working. The password is stored only as a salted PBKDF2 hash. Wrong codes and wrong
+passwords are rate limited: after five misses the API answers `429` for a growing time.
+
+Forgot the password? Create an empty file called `reset-admin-password` next to `config.toml` and restart Heeler.
+The password is cleared and a new setup code is shown.

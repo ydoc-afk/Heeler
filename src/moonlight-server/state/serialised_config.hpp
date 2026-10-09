@@ -139,6 +139,14 @@ struct Profile {
   std::vector<BaseApp> apps;
 };
 
+/** Who administers Heeler and how they prove it to the web manage page. */
+struct AdminConfig {
+  /** The account that administers Heeler (the first one created) */
+  std::optional<std::string> profile_id;
+  /** PBKDF2 hash of the web admin password, never the password itself */
+  std::optional<std::string> password_hash;
+};
+
 struct WolfConfig {
   std::string hostname;
   std::string uuid;
@@ -146,6 +154,7 @@ struct WolfConfig {
   std::vector<PairedClient> paired_clients;
   std::vector<Profile> profiles;
   GstreamerSettings gstreamer;
+  std::optional<AdminConfig> admin;
 };
 
 struct BaseConfig {

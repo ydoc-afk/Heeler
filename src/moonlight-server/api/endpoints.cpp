@@ -3,6 +3,7 @@
 #include <control/input_handler.hpp>
 #include <core/docker.hpp>
 #include <rtp/udp-ping.hpp>
+#include <state/admin.hpp>
 #include <state/config.hpp>
 #include <state/sessions.hpp>
 #include <state/utils.hpp>
@@ -246,6 +247,14 @@ void UnixSocketServer::endpoint_AddProfile(const HTTPRequest &req, std::shared_p
              ranges::to<immer::vector<immer::box<events::App>>>();
     });
     state::update_profiles(state_->app_state->config, profiles.push_back(new_profile));
+
+    // The first account that is created administers Heeler
+    auto admin = state_->app_state->config->admin->load().get();
+    if (!admin.profile_id) {
+      admin.profile_id = p.id;
+      state::update_admin(state_->app_state->config, admin);
+      logs::log(logs::info, "[API] The account '{}' is now the admin", p.id);
+    }
     send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
   } else {
     logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, profile_req.error().what());
@@ -258,6 +267,12 @@ void UnixSocketServer::endpoint_RemoveProfile(const HTTPRequest &req, std::share
   auto profile_req = rfl::json::read<ProfileRemoveRequest>(req.body);
   if (profile_req) {
     auto p = profile_req.value();
+
+    if (state::admin_profile_id(*state_->app_state->config) == p.id) {
+      auto res = GenericErrorResponse{.error = "The admin account can't be removed"};
+      send_http(socket, 409, rfl::json::write(res));
+      return;
+    }
 
     auto profiles = state_->app_state->config->profiles->load().get();
     state::update_profiles(state_->app_state->config,
@@ -272,6 +287,100 @@ void UnixSocketServer::endpoint_RemoveProfile(const HTTPRequest &req, std::share
     auto res = GenericErrorResponse{.error = profile_req.error().what()};
     send_http(socket, 500, rfl::json::write(res));
   }
+}
+
+void UnixSocketServer::endpoint_AdminStatus(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  const auto &cfg = *state_->app_state->config;
+  auto admin = cfg.admin->load();
+  auto res = AdminStatusResponse{.admin_profile_id = admin->profile_id,
+                                 .password_set = admin->password_hash.has_value(),
+                                 .setup_required = !admin->password_hash.has_value() && admin->profile_id.has_value()};
+  send_http(socket, 200, rfl::json::write(res));
+}
+
+void UnixSocketServer::endpoint_AdminSetup(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto request = rfl::json::read<AdminSetupRequest>(req.body);
+  if (!request) {
+    send_http(socket, 400, rfl::json::write(GenericErrorResponse{.error = "Invalid request"}));
+    return;
+  }
+  const auto &cfg = *state_->app_state->config;
+  auto admin = cfg.admin->load().get();
+
+  if (admin.password_hash) {
+    send_http(socket, 409, rfl::json::write(GenericErrorResponse{.error = "The password is already set"}));
+    return;
+  }
+  if (!admin.profile_id) {
+    send_http(socket, 409, rfl::json::write(GenericErrorResponse{.error = "Create the first account first"}));
+    return;
+  }
+
+  long retry_after = 0;
+  if (state::admin_attempt_allowed(cfg, retry_after) == state::Attempt::Locked) {
+    send_http(socket,
+              429,
+              {{"Retry-After: " + std::to_string(retry_after)}},
+              rfl::json::write(GenericErrorResponse{.error = "Too many wrong tries, wait and try again"}));
+    return;
+  }
+
+  auto code = cfg.setup_code->load().get();
+  if (code.empty() || !state::secure_equals(code, state::normalize_setup_code(request.value().setup_code.value()))) {
+    state::admin_attempt_result(cfg, false);
+    logs::log(logs::warning, "[API] Wrong setup code");
+    send_http(socket, 403, rfl::json::write(GenericErrorResponse{.error = "Wrong setup code"}));
+    return;
+  }
+
+  auto password = request.value().password.value();
+  if (password.size() < 8) {
+    send_http(socket, 400, rfl::json::write(GenericErrorResponse{.error = "The password needs at least 8 characters"}));
+    return;
+  }
+
+  auto hash = state::hash_password(password);
+  if (hash.empty()) {
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Couldn't hash the password"}));
+    return;
+  }
+
+  admin.password_hash = hash;
+  state::update_admin(cfg, admin);
+  cfg.setup_code->store("");
+  std::error_code ec;
+  std::filesystem::remove(std::filesystem::path(cfg.config_source).parent_path() / "setup-code.txt", ec);
+  state::admin_attempt_result(cfg, true);
+  logs::log(logs::info, "[API] The web admin password was set");
+  send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
+}
+
+void UnixSocketServer::endpoint_AdminLogin(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto request = rfl::json::read<AdminLoginRequest>(req.body);
+  if (!request) {
+    send_http(socket, 400, rfl::json::write(GenericErrorResponse{.error = "Invalid request"}));
+    return;
+  }
+  const auto &cfg = *state_->app_state->config;
+
+  long retry_after = 0;
+  if (state::admin_attempt_allowed(cfg, retry_after) == state::Attempt::Locked) {
+    send_http(socket,
+              429,
+              {{"Retry-After: " + std::to_string(retry_after)}},
+              rfl::json::write(GenericErrorResponse{.error = "Too many wrong tries, wait and try again"}));
+    return;
+  }
+
+  auto hash = cfg.admin->load()->password_hash;
+  auto ok = hash && state::verify_password(request.value().password, *hash);
+  state::admin_attempt_result(cfg, ok);
+  if (!ok) {
+    logs::log(logs::warning, "[API] Wrong admin password");
+    send_http(socket, 401, rfl::json::write(GenericErrorResponse{.error = "Wrong password"}));
+    return;
+  }
+  send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
 }
 
 void UnixSocketServer::endpoint_StreamSessions(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
