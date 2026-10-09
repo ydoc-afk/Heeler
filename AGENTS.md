@@ -207,7 +207,7 @@ Behavior is driven by `HEALER_*` env vars read via `utils::get_env` (full workin
 `.devcontainer/devcontainer.json`): `HEALER_CFG_FILE`, `HEALER_PRIVATE_KEY_FILE`/`HEALER_PRIVATE_CERT_FILE`,
 `HEALER_LOG_LEVEL`, `HEALER_DOCKER_SOCKET`, `HEALER_RENDER_NODE`/`HEALER_ENCODER_NODE` (GPU DRI nodes),
 `HEALER_PULSE_IMAGE`, `HEALER_INTERNAL_IP`/`HEALER_INTERNAL_MAC`, `HEALER_USE_ZERO_COPY`,
-`HEALER_STOP_CONTAINER_ON_EXIT`. The legacy `WOLF_*` names are still accepted as deprecated aliases
+`HEALER_STOP_CONTAINER_ON_EXIT`, `HEALER_STEAM_LIBRARY` (shared Steam library, see the user docs). The legacy `WOLF_*` names are still accepted as deprecated aliases
 (`HEALER_*` wins when both are set). A few (e.g. `HEALER_EMBED_PULSE`, `PULSE_SERVER`) are set/consumed
 by `docker/startup.sh` + `supervisord.conf`, not by Heeler itself. Container-boundary vars that guest apps
 read (`WOLF_SOCKET_PATH`, `WOLF_SESSION_ID`, `WOLF_VIDEO_BUFFER_CAPS`) intentionally keep the `WOLF_`
