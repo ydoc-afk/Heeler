@@ -1,3 +1,4 @@
+#include <core/docker.hpp>
 #include <fstream>
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
@@ -11,11 +12,47 @@
 namespace wolf::core::sessions {
 
 /**
+ * Docker creates a missing mount point as root, and the library's steamapps folder is the parent of the per-account
+ * compatdata mount. Left to Docker, Steam (running as the app user) couldn't install anything into it, so a short
+ * lived container makes the folder first.
+ */
+static bool prepare_library_folder(
+    const std::string &library, const std::string &image, uint uid, uint gid, const std::string &session_id) {
+  auto docker_socket = utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock");
+  docker::DockerAPI api(docker_socket);
+  auto script = fmt::format("mkdir -p /library/steamapps && chown {}:{} /library/steamapps", uid, gid);
+  auto options =
+      boost::json::serialize(boost::json::object{{"Entrypoint", boost::json::array{"/bin/sh", "-c", script}}});
+  docker::Container helper = {
+      .id = "",
+      .name = fmt::format("heeler-steam-library-prep-{}", session_id),
+      .image = image,
+      .status = docker::CREATED,
+      .mounts = {docker::MountPoint{.source = library, .destination = "/library", .mode = "rw"}}};
+  auto created = api.create(helper, options);
+  if (!created) {
+    return false;
+  }
+  api.start_by_id(created->id);
+  bool done = false;
+  for (int i = 0; i < 100 && !done; ++i) {
+    auto state = api.get_by_id(created->id);
+    done = !state || state->status == docker::EXITED;
+    if (!done) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
+  }
+  api.remove_by_id(created->id, false, true);
+  return done;
+}
+
+/**
  * Mounts the shared Steam library (HEALER_STEAM_LIBRARY) into a Steam container and lists it in the account's
  * libraryfolders.vdf, so every account installs into, and plays from, the same folder.
  * The Proton prefixes (compatdata) stay per account.
  */
 static void mount_steam_library(const std::string &library,
+                                const std::string &image,
                                 const RunnerArgs &args,
                                 immer::array_transient<std::pair<std::string, std::string>> &mounted_paths) {
   namespace fs = std::filesystem;
@@ -58,6 +95,12 @@ static void mount_steam_library(const std::string &library,
     if (chown(vdf_path.c_str(), uid, gid) != 0) {
       logs::log(logs::warning, "[STEAM_LIBRARY] Can't hand {} to the user", vdf_path.string());
     }
+  }
+
+  if (!prepare_library_folder(library, image, uid, gid, args.session_id)) {
+    logs::log(logs::warning,
+              "[STEAM_LIBRARY] Couldn't prepare {}/steamapps, Steam may not be able to install games there",
+              library);
   }
 
   mounted_paths.push_back({library, mount});
@@ -117,9 +160,11 @@ void start_runner(std::shared_ptr<events::Runner> runner,
   /* Shared Steam library, for the Steam app only */
   if (auto library = state::steam_library_from_env()) {
     auto serialized = runner->serialize();
-    if (rfl::holds_alternative<wolf::config::AppDocker>(serialized.variant()) &&
-        state::is_steam_image(rfl::get<wolf::config::AppDocker>(serialized.variant()).image)) {
-      mount_steam_library(*library, *args, mounted_paths);
+    if (rfl::holds_alternative<wolf::config::AppDocker>(serialized.variant())) {
+      auto image = rfl::get<wolf::config::AppDocker>(serialized.variant()).image;
+      if (state::is_steam_image(image)) {
+        mount_steam_library(*library, image, *args, mounted_paths);
+      }
     }
   }
 
