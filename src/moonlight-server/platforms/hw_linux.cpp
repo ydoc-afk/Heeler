@@ -236,7 +236,7 @@ std::string get_mac_address(std::string_view local_ip) {
   if (getifaddrs(&ifaddrptr) == -1) {
     logs::log(logs::warning,
               "Unable to get ifaddrs: {} . You can override this by settings the env variables "
-              "HEALER_INTERNAL_MAC or HEALER_INTERNAL_IP",
+              "HEELER_INTERNAL_MAC or HEELER_INTERNAL_IP",
               strerror(errno));
     return "00:00:00:00:00:00";
   }
@@ -267,7 +267,7 @@ std::string get_mac_address(std::string_view local_ip) {
 
   logs::log(logs::warning,
             "Unable to get mac address of ip address: {}, you can override this by settings the env variables "
-            "HEALER_INTERNAL_MAC or HEALER_INTERNAL_IP",
+            "HEELER_INTERNAL_MAC or HEELER_INTERNAL_IP",
             local_ip);
 
   return "00:00:00:00:00:00";

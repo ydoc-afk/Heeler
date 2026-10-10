@@ -116,16 +116,16 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
 
   // Lists the pending pair requests, so the PIN page (and any other client) can
   // discover them without reading the server log for the one-shot /pin/#<secret> URL.
-  // The list hands out the secrets needed to submit a PIN, so it requires the preset HEALER_PAIRING_KEY
-  std::string expected_key = utils::get_env("HEALER_PAIRING_KEY", "");
+  // The list hands out the secrets needed to submit a PIN, so it requires the preset HEELER_PAIRING_KEY
+  std::string expected_key = utils::get_env("HEELER_PAIRING_KEY", "");
   // Clients on these networks (LAN / VPN) can use the page without the key, see trusted_nets.hpp
   auto trusted = std::make_shared<const std::vector<trusted_nets::Net>>(
-      trusted_nets::from_env(utils::get_env("HEALER_PIN_TRUSTED_NETS")));
+      trusted_nets::from_env(utils::get_env("HEELER_PIN_TRUSTED_NETS")));
   if (expected_key.empty() && trusted->empty()) {
-    logs::log(logs::info, "PIN landing page disabled, set HEALER_PAIRING_KEY to enable it at /pin/");
+    logs::log(logs::info, "PIN landing page disabled, set HEELER_PAIRING_KEY to enable it at /pin/");
   } else if (expected_key.empty()) {
     logs::log(logs::info,
-              "PIN landing page open to trusted networks only (HEALER_PIN_TRUSTED_NETS), set HEALER_PAIRING_KEY to "
+              "PIN landing page open to trusted networks only (HEELER_PIN_TRUSTED_NETS), set HEELER_PAIRING_KEY to "
               "also allow other networks");
   }
   auto key_attempts = std::make_shared<immer::atom<pairing_key::AttemptsMap>>();
@@ -207,13 +207,13 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     send_xml<SimpleWeb::HTTP>(resp, SimpleWeb::StatusCode::success_ok, xml);
   };
 
-  auto preset_pin = preset_pin::parse(utils::get_env("HEALER_PAIRING_PIN"));
+  auto preset_pin = preset_pin::parse(utils::get_env("HEELER_PAIRING_PIN"));
   if (preset_pin) {
     logs::log(logs::warning,
-              "HEALER_PAIRING_PIN is set: any client that knows it can pair, remove it once you're done pairing");
+              "HEELER_PAIRING_PIN is set: any client that knows it can pair, remove it once you're done pairing");
   }
   auto preset_pin_attempts = std::make_shared<immer::atom<preset_pin::AttemptsMap>>();
-  std::string pairing_webhook_url = utils::get_env("HEALER_PAIRING_WEBHOOK", "");
+  std::string pairing_webhook_url = utils::get_env("HEELER_PAIRING_WEBHOOK", "");
   auto pair_handler = state->event_bus->register_handler<immer::box<events::PairSignal>>(
       [pairing_atom, preset_pin, preset_pin_attempts, pairing_webhook_url](
           const immer::box<events::PairSignal> pair_sig) {
@@ -225,7 +225,7 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
             return updated;
           });
           if (allowed) {
-            logs::log(logs::info, "Answering pairing request from {} with HEALER_PAIRING_PIN", pair_sig->client_ip);
+            logs::log(logs::info, "Answering pairing request from {} with HEELER_PAIRING_PIN", pair_sig->client_ip);
             pair_sig->user_pin->set_value(*preset_pin);
             return;
           }

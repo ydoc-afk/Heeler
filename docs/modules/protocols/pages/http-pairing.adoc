@@ -84,9 +84,9 @@ The PIN page can be opened at that URL, or at the stable `http://<host>:<port>/p
 `GET /pin/pending` hands out the pair secrets that `POST /pin/` requires, so it is only open to trusted networks and
 otherwise protected by a preset key:
 
-* Clients connecting from a network in `HEALER_PIN_TRUSTED_NETS` (by default the private LAN ranges and Tailscale) get
+* Clients connecting from a network in `HEELER_PIN_TRUSTED_NETS` (by default the private LAN ranges and Tailscale) get
   the list without a key.
-* Everyone else needs the key. With `HEALER_PAIRING_KEY` unset the endpoint answers `403` and the landing page tells the
+* Everyone else needs the key. With `HEELER_PAIRING_KEY` unset the endpoint answers `403` and the landing page tells the
   user to set it (the one-shot URL from the log keeps working).
 * The key is sent in the `X-Pairing-Key` header; a missing key answers `401` (`key_required`), a wrong one `401`
   (`wrong_key`). After 5 wrong keys in a minute, the client IP is locked out (`429`) for a minute.

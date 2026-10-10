@@ -25,14 +25,14 @@ std::optional<std::string> normalize_library_path(std::string_view path) {
 }
 
 std::optional<std::string> steam_library_from_env() {
-  auto value = utils::get_env("HEALER_STEAM_LIBRARY");
+  auto value = utils::get_env("HEELER_STEAM_LIBRARY");
   if (!value || !*value) {
     return std::nullopt;
   }
   auto path = normalize_library_path(value);
   if (!path) {
     logs::log(logs::warning,
-              "HEALER_STEAM_LIBRARY={} is ignored: it must be an absolute path on the host, not / and without "
+              "HEELER_STEAM_LIBRARY={} is ignored: it must be an absolute path on the host, not / and without "
               "quotes, backslashes or colons",
               value);
   }

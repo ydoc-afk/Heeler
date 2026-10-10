@@ -10,7 +10,7 @@
 #include <thread>
 
 /**
- * Notifies an external service (HEALER_PAIRING_WEBHOOK) when a Moonlight client starts pairing,
+ * Notifies an external service (HEELER_PAIRING_WEBHOOK) when a Moonlight client starts pairing,
  * so that the admin gets the PIN page link on their phone instead of having to look at the log.
  */
 namespace pairing_webhook {

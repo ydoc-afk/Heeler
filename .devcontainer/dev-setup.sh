@@ -22,4 +22,4 @@ cmake --build . --target install --config Release
 bash /etc/cont-init.d/30-nvidia.sh
 
 # Create base wolf cfg folder
-mkdir -p $HEALER_CFG_FOLDER
+mkdir -p $HEELER_CFG_FOLDER

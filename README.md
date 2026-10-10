@@ -65,7 +65,7 @@ Heeler started as a fork of [Wolf](https://github.com/games-on-whales/wolf) and 
 - Talk to Docker through a socket proxy over TCP instead of mounting the raw Docker socket
 - Pull app images from private registries with your Docker `config.json`
 - A `/api/v1/health` endpoint for monitoring
-- Every setting is a `HEALER_*` environment variable (the old `WOLF_*` names still work)
+- Every setting is a `HEELER_*` environment variable (the old `HEALER_*` and `WOLF_*` names still work)
 
 ## 🏁 Get started
 
@@ -83,7 +83,7 @@ docker run \
     -v /dev/:/dev/:rw \
     -v /run/udev:/run/udev:rw \
     --device-cgroup-rule "c 13:* rmw" \
-    -e HEALER_PAIRING_KEY=pick-a-long-random-secret \
+    -e HEELER_PAIRING_KEY=pick-a-long-random-secret \
     ghcr.io/ydoc-afk/wolf:stable
 ```
 
@@ -91,7 +91,7 @@ Then pair a Moonlight client:
 
 1. Add your host in Moonlight, it shows a 4-digit PIN
 2. Open `http://heeler:47989/pin/` (`heeler` being your server's hostname). From your home network or Tailscale it
-   opens straight away; from any other network unlock it with your `HEALER_PAIRING_KEY`
+   opens straight away; from any other network unlock it with your `HEELER_PAIRING_KEY`
    (or bookmark `http://heeler:47989/pin/#key=<your key>` to unlock it automatically, it stays open waiting for devices)
 3. Type the PIN next to the device that's waiting, and start playing
 
@@ -103,15 +103,15 @@ PrismLauncher, Firefox, ...) come from [games-on-whales/gow](https://github.com/
 
 | Variable                  | What it does                                                                                   |
 |---------------------------|------------------------------------------------------------------------------------------------|
-| `HEALER_PAIRING_KEY`      | Admin key for the PIN page from networks that are not trusted (see `HEALER_PIN_TRUSTED_NETS`)   |
-| `HEALER_PIN_TRUSTED_NETS` | Networks that can use the PIN page without the key; default: LAN + Tailscale (see the docs)      |
-| `HEALER_PAIRING_WEBHOOK`  | URL that gets the PIN page link whenever a device starts pairing                               |
-| `HEALER_PAIRING_PIN`      | Fixed 4-digit PIN for clients that let you choose one; rate limited, meant for temporary use   |
-| `HEALER_RENDER_NODE`      | Default GPU (`/dev/dri/renderD128`); apps can pick their own with `render_node` in `config.toml` |
-| `HEALER_FEC_PERCENTAGE`   | Extra error correction for lossy networks (default `20`)                                       |
-| `HEALER_DOCKER_SOCKET`    | Docker/Podman socket path, or `tcp://proxy:2375` for a socket proxy                            |
-| `HEALER_DOCKER_CONFIG`    | Docker `config.json` with credentials for private registries                                   |
-| `HEALER_LOG_LEVEL`        | `ERROR`, `WARNING`, `INFO`, `DEBUG` or `TRACE`                                                 |
+| `HEELER_PAIRING_KEY`      | Admin key for the PIN page from networks that are not trusted (see `HEELER_PIN_TRUSTED_NETS`)   |
+| `HEELER_PIN_TRUSTED_NETS` | Networks that can use the PIN page without the key; default: LAN + Tailscale (see the docs)      |
+| `HEELER_PAIRING_WEBHOOK`  | URL that gets the PIN page link whenever a device starts pairing                               |
+| `HEELER_PAIRING_PIN`      | Fixed 4-digit PIN for clients that let you choose one; rate limited, meant for temporary use   |
+| `HEELER_RENDER_NODE`      | Default GPU (`/dev/dri/renderD128`); apps can pick their own with `render_node` in `config.toml` |
+| `HEELER_FEC_PERCENTAGE`   | Extra error correction for lossy networks (default `20`)                                       |
+| `HEELER_DOCKER_SOCKET`    | Docker/Podman socket path, or `tcp://proxy:2375` for a socket proxy                            |
+| `HEELER_DOCKER_CONFIG`    | Docker `config.json` with credentials for private registries                                   |
+| `HEELER_LOG_LEVEL`        | `ERROR`, `WARNING`, `INFO`, `DEBUG` or `TRACE`                                                 |
 
 The full list, and everything `config.toml` can do, is in the
 [configuration guide](docs/modules/user/pages/configuration.adoc).

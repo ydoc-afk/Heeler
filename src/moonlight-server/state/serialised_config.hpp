@@ -15,12 +15,12 @@ enum class ControllerType {
 
 struct ClientSettings {
   /* The UID/GID that apps run as defaults to 1000:1000, but the defaults applied
-   * to newly paired clients can be overridden via the HEALER_DEFAULT_RUN_UID /
-   * HEALER_DEFAULT_RUN_GID environment variables. This lets deployments that don't
+   * to newly paired clients can be overridden via the HEELER_DEFAULT_RUN_UID /
+   * HEELER_DEFAULT_RUN_GID environment variables. This lets deployments that don't
    * use the conventional 1000:1000 — for example Unraid, where `nobody` is
    * 99:100 — set sensible defaults without editing each client by hand. */
-  uint run_uid = std::stoul(utils::get_env("HEALER_DEFAULT_RUN_UID", "1000"));
-  uint run_gid = std::stoul(utils::get_env("HEALER_DEFAULT_RUN_GID", "1000"));
+  uint run_uid = std::stoul(utils::get_env("HEELER_DEFAULT_RUN_UID", "1000"));
+  uint run_gid = std::stoul(utils::get_env("HEELER_DEFAULT_RUN_GID", "1000"));
   /* A list of forced controller overrides, the position in the array denotes the controller number */
   std::vector<ControllerType> controllers_override = {};
   /* Values above 1.0 will make it faster, between 0.0 and 1.0 will make it slower */
@@ -120,7 +120,7 @@ struct BaseApp {
   std::string title;
   std::optional<std::string> icon_png_path;
   std::optional<std::string> render_node;
-  /* The GPU used to encode the video, defaults to render_node (or HEALER_ENCODER_NODE when that isn't set) */
+  /* The GPU used to encode the video, defaults to render_node (or HEELER_ENCODER_NODE when that isn't set) */
   std::optional<std::string> encoder_render_node;
   std::optional<BaseAppVideoOverride> video;
   std::optional<BaseAppAudioOverride> audio;

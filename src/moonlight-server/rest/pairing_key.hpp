@@ -8,7 +8,7 @@
 #include <utility>
 
 /**
- * Protects the PIN landing page (GET /pin/pending) with a preset admin key (HEALER_PAIRING_KEY).
+ * Protects the PIN landing page (GET /pin/pending) with a preset admin key (HEELER_PAIRING_KEY).
  *
  * The pending list hands out the pair secrets that are needed to submit a PIN, so without a key anybody
  * that can reach the HTTP port could start pairing, read their own secret and approve themselves.

@@ -68,11 +68,11 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
   }
 
   std::optional<std::string> internal_ip = std::nullopt;
-  if (auto override_ip = utils::get_env("HEALER_INTERNAL_IP")) {
+  if (auto override_ip = utils::get_env("HEELER_INTERNAL_IP")) {
     internal_ip = override_ip;
   }
   std::optional<std::string> mac_address = std::nullopt;
-  if (auto override_mac = utils::get_env("HEALER_INTERNAL_MAC")) {
+  if (auto override_mac = utils::get_env("HEELER_INTERNAL_MAC")) {
     mac_address = override_mac;
   }
 
@@ -80,7 +80,7 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
   std::string host_base_state_folder = local_base_state_folder;
   std::string host_xdg_runtime_dir = utils::get_env("XDG_RUNTIME_DIR", "/tmp/sockets");
 
-  docker::DockerAPI docker_api(utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock"));
+  docker::DockerAPI docker_api(utils::get_env("HEELER_DOCKER_SOCKET", "/var/run/docker.sock"));
   if (auto container = introspect::get_current_container(docker_api)) {
     host_base_state_folder =
         introspect::get_host_path_for(*container, local_base_state_folder).value_or(local_base_state_folder);
@@ -134,8 +134,8 @@ std::optional<sessions::AudioServer> setup_audio_server(const std::string &host_
     return {{.server = audio_server}};
   } else {
     logs::log(logs::info, "Starting PulseAudio docker container");
-    docker::DockerAPI docker_api(utils::get_env("HEALER_DOCKER_SOCKET", "/var/run/docker.sock"),
-                                 utils::get_env("HEALER_DOCKER_CONFIG", ""));
+    docker::DockerAPI docker_api(utils::get_env("HEELER_DOCKER_SOCKET", "/var/run/docker.sock"),
+                                 utils::get_env("HEELER_DOCKER_CONFIG", ""));
     auto pulse_socket = fmt::format("{}/pulse-socket", runtime_dir);
 
     /* Cleanup old leftovers, Pulse will fail to start otherwise */
@@ -150,7 +150,7 @@ std::optional<sessions::AudioServer> setup_audio_server(const std::string &host_
         docker::Container{
             .id = "",
             .name = "WolfPulseAudio",
-            .image = utils::get_env("HEALER_PULSE_IMAGE", "ghcr.io/games-on-whales/pulseaudio:master"),
+            .image = utils::get_env("HEELER_PULSE_IMAGE", "ghcr.io/games-on-whales/pulseaudio:master"),
             .status = docker::CREATED,
             .ports = {},
             .mounts = {docker::MountPoint{.source = host_runtime_dir, .destination = "/tmp/pulse/", .mode = "rw"}},
@@ -164,10 +164,10 @@ std::optional<sessions::AudioServer> setup_audio_server(const std::string &host_
             })");
     if (container && docker_api.start_by_id(container.value().id)) {
       int ms = 2000;
-      auto ms_str = utils::get_env("HEALER_PULSE_CONTAINER_TIMEOUT_MS", "2000");
+      auto ms_str = utils::get_env("HEELER_PULSE_CONTAINER_TIMEOUT_MS", "2000");
       if (auto [end, ec] = std::from_chars(ms_str, ms_str + std::strlen(ms_str), ms);
           ec != std::errc() || *end != '\0' || ms < 0) {
-        logs::log(logs::warning, "Invalid HEALER_PULSE_CONTAINER_TIMEOUT_MS '{}', using 2000", ms_str);
+        logs::log(logs::warning, "Invalid HEELER_PULSE_CONTAINER_TIMEOUT_MS '{}', using 2000", ms_str);
         ms = 2000;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(ms)); // TODO: Better way of knowing when ready?
@@ -192,9 +192,9 @@ void run() {
   auto runtime_dir = utils::get_env("XDG_RUNTIME_DIR", "/tmp/sockets");
   logs::log(logs::debug, "XDG_RUNTIME_DIR={}", runtime_dir);
 
-  auto config_file = utils::get_env("HEALER_CFG_FILE", "config.toml");
-  auto p_key_file = utils::get_env("HEALER_PRIVATE_KEY_FILE", "key.pem");
-  auto p_cert_file = utils::get_env("HEALER_PRIVATE_CERT_FILE", "cert.pem");
+  auto config_file = utils::get_env("HEELER_CFG_FILE", "config.toml");
+  auto p_key_file = utils::get_env("HEELER_PRIVATE_KEY_FILE", "key.pem");
+  auto p_cert_file = utils::get_env("HEELER_PRIVATE_CERT_FILE", "cert.pem");
   auto local_state = initialize(config_file, p_key_file, p_cert_file);
 
   // HTTP APIs
@@ -299,7 +299,7 @@ void run() {
 }
 
 int main(int argc, char *argv[]) try {
-  logs::init(logs::parse_level(utils::get_env("HEALER_LOG_LEVEL", "INFO")));
+  logs::init(logs::parse_level(utils::get_env("HEELER_LOG_LEVEL", "INFO")));
   // Graceful termination: stop all sessions/lobbies before exiting (see run()).
   std::signal(SIGINT, graceful_shutdown_handler);
   std::signal(SIGTERM, graceful_shutdown_handler);

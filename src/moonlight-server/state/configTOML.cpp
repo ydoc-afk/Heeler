@@ -403,10 +403,10 @@ Config load_or_default(const std::string &source,
   ensure_interpipesrc_name(default_gst_video_settings.default_source, "video");
   ensure_interpipesrc_name(default_gst_audio_settings.default_source, "audio");
 
-  bool use_zero_copy = utils::get_env("HEALER_USE_ZERO_COPY", "") != std::string("FALSE");
+  bool use_zero_copy = utils::get_env("HEELER_USE_ZERO_COPY", "") != std::string("FALSE");
 
-  auto default_app_render_node = utils::get_env("HEALER_RENDER_NODE", "/dev/dri/renderD128");
-  auto default_gst_render_node = utils::get_env("HEALER_ENCODER_NODE", default_app_render_node);
+  auto default_app_render_node = utils::get_env("HEELER_RENDER_NODE", "/dev/dri/renderD128");
+  auto default_gst_render_node = utils::get_env("HEELER_ENCODER_NODE", default_app_render_node);
   auto default_encoders = resolve_encoders(default_gst_render_node, default_gst_video_settings, use_zero_copy);
   if (!default_encoders) {
     throw std::runtime_error(

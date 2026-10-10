@@ -4,24 +4,24 @@ Heeler is configured via a TOML config file and some additional optional ENV var
 
 == ENV variables
 
-The `WOLF_*` names are still accepted as deprecated aliases for backwards compatibility; when both are set, the `HEALER_*` name wins.
+The old `HEALER_*` spelling (a typo that shipped for a while) and the legacy `WOLF_*` names are still accepted as deprecated aliases, so existing setups keep working. When several are set, the order is `HEELER_*`, then `HEALER_*`, then `WOLF_*`.
 
 |===
 |Variable |Default |Description
 
-|HEALER_LOG_LEVEL
+|HEELER_LOG_LEVEL
 |INFO
 |The log level to show, one of ERROR, WARNING, INFO, DEBUG, TRACE
 
-|HEALER_CFG_FILE
+|HEELER_CFG_FILE
 |/etc/wolf/cfg/config.toml
 |Full path to the config file
 
-|HEALER_PRIVATE_KEY_FILE
+|HEELER_PRIVATE_KEY_FILE
 |/etc/wolf/cfg/key.pem
 |Full path to the key.pem file
 
-|HEALER_PRIVATE_CERT_FILE
+|HEELER_PRIVATE_CERT_FILE
 |/etc/wolf/cfg/cert.pem
 |Full path to the cert.pem file
 
@@ -33,23 +33,23 @@ The `WOLF_*` names are still accepted as deprecated aliases for backwards compat
 |_(unset)_
 |PulseAudio server Heeler streams audio from. Left unset, Heeler starts an embedded PulseAudio server inside its own container and uses that. Set it (e.g. to a host socket path) to stream from an external PulseAudio/PipeWire instead.
 
-|HEALER_PULSE_IMAGE
+|HEELER_PULSE_IMAGE
 |ghcr.io/games-on-whales/pulseaudio:master
 |Fallback only: the PulseAudio image Heeler spins up as a sidecar container if neither the embedded server nor `PULSE_SERVER` is reachable
 
-|HEALER_STOP_CONTAINER_ON_EXIT
+|HEELER_STOP_CONTAINER_ON_EXIT
 |TRUE
 |Set to False in order to avoid force stop and removal of containers when the connection is closed
 
-|HEALER_WAYLAND_SOCKET_WAIT_TIMEOUT_MS
+|HEELER_WAYLAND_SOCKET_WAIT_TIMEOUT_MS
 |5000
 |The time in milliseconds to wait for the Wayland socket to appear before starting the stream runner
 
-|HEALER_DOCKER_SOCKET
+|HEELER_DOCKER_SOCKET
 |/var/run/docker.sock
 |Where to reach the Docker (or Podman) engine: a unix socket path (`/var/run/docker.sock`, `unix:///run/podman/podman.sock`) or a plain-HTTP TCP endpoint (`tcp://docker-proxy:2375`). TCP lets Heeler go through a socket proxy (e.g. https://github.com/Tecnativa/docker-socket-proxy[docker-socket-proxy]) instead of mounting the raw Docker socket. TLS (`2376`) is not supported.
 
-|HEALER_DOCKER_CONFIG
+|HEELER_DOCKER_CONFIG
 |_(unset)_
 |Path (inside the Heeler container) to a Docker CLI `config.json` holding registry credentials, e.g. mount `~/.docker/config.json` read-only. When set, Heeler uses the matching `auths` entry to pull app images from private registries. Only inline `auth` and `identitytoken` entries are supported, not `credsStore`/`credHelpers`.
 
@@ -57,7 +57,7 @@ The `WOLF_*` names are still accepted as deprecated aliases for backwards compat
 |nvidia-driver-vol
 |The name of the externally created Docker Volume that holds the Nvidia drivers
 
-|HEALER_NVIDIA_WINE_DIR
+|HEELER_NVIDIA_WINE_DIR
 |_(unset)_
 |Host folder with the Nvidia driver's Windows DLLs (`nvngx.dll`, `_nvngx.dll`), mounted read-only into app containers on Nvidia GPUs so Proton games can offer DLSS/DLAA (without them games fall back to FSR). The container toolkit doesn't provide these. Usually `/usr/lib/nvidia/wine` (Arch) or `/usr/lib/x86_64-linux-gnu/nvidia/wine` (Debian/Ubuntu); it's mounted at the same path inside the container, use `host_dir:container_dir` to pick another. Skipped for apps that already mount that path.
 
@@ -65,43 +65,43 @@ The `WOLF_*` names are still accepted as deprecated aliases for backwards compat
 |/etc/wolf
 |The base folder in the host where the running apps will store permanent state, if not set Heeler will automatically use the path that is mounted in the docker container
 
-|HEALER_RENDER_NODE
+|HEELER_RENDER_NODE
 |/dev/dri/renderD128
 |The default render node used for virtual desktops; see: <<_multiple_gpu>>
 
-|HEALER_DOCKER_FAKE_UDEV_PATH
+|HEELER_DOCKER_FAKE_UDEV_PATH
 |$HOST_APPS_STATE_FOLDER/fake-udev
 |The path on the host for the fake-udev CLI tool
 
-|HEALER_FEC_PERCENTAGE
+|HEELER_FEC_PERCENTAGE
 |20
 |Percentage (0-100) of extra Forward Error Correction data sent with each video frame. Raise it on lossy links (e.g. Wi-Fi) so Moonlight can recover dropped packets; lower it to leave more of the bitrate for video. When the client reports its configured bitrate and FEC is 80 or lower, Heeler lowers the encoder bitrate so that video plus FEC stays within it.
 
-|HEALER_PAIRING_KEY
+|HEELER_PAIRING_KEY
 |_(unset)_
-|Admin key for the PIN landing page (`http://<host>:47989/pin/`) when it is opened from a network that is not in `HEALER_PIN_TRUSTED_NETS`. When set, the page asks for it once (the browser remembers it) and then lists every device waiting to pair. When unset, the list is only available from trusted networks and, elsewhere, you have to use the one-shot link printed in the log. Pick a long random value: the page is served over plain HTTP, so only use it on a network you trust.
+|Admin key for the PIN landing page (`http://<host>:47989/pin/`) when it is opened from a network that is not in `HEELER_PIN_TRUSTED_NETS`. When set, the page asks for it once (the browser remembers it) and then lists every device waiting to pair. When unset, the list is only available from trusted networks and, elsewhere, you have to use the one-shot link printed in the log. Pick a long random value: the page is served over plain HTTP, so only use it on a network you trust.
 
-|HEALER_PIN_TRUSTED_NETS
+|HEELER_PIN_TRUSTED_NETS
 |`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `100.64.0.0/10` (Tailscale), `fc00::/7`, `fe80::/10`
-|Networks (CIDR ranges or single addresses, separated by commas, spaces or semicolons) that can use the PIN landing page without `HEALER_PAIRING_KEY`, so pairing is just "Moonlight shows a PIN, type it on the page". Everything else still needs the key. Set it empty to always require the key. The decision uses the address the connection really comes from, never a forwarded header. Loopback (`127.0.0.1`, `::1`) is _not_ trusted by default: reverse proxies and `tailscale serve`/Funnel connect from there, which would make internet clients look local; add `127.0.0.0/8` yourself only if you know nothing like that is in front of Heeler. Heeler must see the real client address, so run it with `network_mode: host` (with Docker bridge networking every client looks like the Docker gateway, which is a private address and therefore trusted).
+|Networks (CIDR ranges or single addresses, separated by commas, spaces or semicolons) that can use the PIN landing page without `HEELER_PAIRING_KEY`, so pairing is just "Moonlight shows a PIN, type it on the page". Everything else still needs the key. Set it empty to always require the key. The decision uses the address the connection really comes from, never a forwarded header. Loopback (`127.0.0.1`, `::1`) is _not_ trusted by default: reverse proxies and `tailscale serve`/Funnel connect from there, which would make internet clients look local; add `127.0.0.0/8` yourself only if you know nothing like that is in front of Heeler. Heeler must see the real client address, so run it with `network_mode: host` (with Docker bridge networking every client looks like the Docker gateway, which is a private address and therefore trusted).
 
-|HEALER_ICON_URL_HOSTS
+|HEELER_ICON_URL_HOSTS
 |_(unset)_
 |Comma-separated extra hosts that the API's `get-icon` endpoint may download icons from (https only), on top of `games-on-whales.github.io`. Icons set in the config are always allowed.
 
-|HEALER_PAIRING_PIN
+|HEELER_PAIRING_PIN
 |_(unset)_
 |A fixed 4-digit PIN that Heeler answers pairing requests with, so no PIN has to be typed on the host. Only useful with clients that let you choose the PIN, like `moonlight pair <host> --pin 1234` (moonlight-qt); the phone apps and the regular desktop app always pick their own PIN. Anyone who knows it can pair, so set it only while pairing. Each client IP gets at most 5 automatic attempts per minute, after that the request has to be approved on the PIN page.
 
-|HEALER_PAIRING_WEBHOOK
+|HEELER_PAIRING_WEBHOOK
 |_(unset)_
 |URL that Heeler POSTs to whenever a Moonlight client starts pairing, so you get the PIN page link on your phone. The JSON body has `text`/`content` (a ready-made message, understood by Slack and Discord webhooks), `client_ip`, `hostname` and `pin_url`, and also works with ntfy, Gotify, Home Assistant or any generic webhook. The link contains the secret needed to approve that one pairing, so only send it to an endpoint you trust (preferably HTTPS).
 
-|HEALER_DEFAULT_RUN_UID
+|HEELER_DEFAULT_RUN_UID
 |1000
 |The default UID that apps run as, applied to newly paired clients; existing clients keep their saved values
 
-|HEALER_DEFAULT_RUN_GID
+|HEELER_DEFAULT_RUN_GID
 |1000
 |The default GID that apps run as, applied to newly paired clients; existing clients keep their saved values
 |===
@@ -524,7 +524,7 @@ If both are defined, Gamescoped is used. (see https://github.com/games-on-whales
 == Multiple GPUs
 
 When you have multiple GPUs installed in your host, you might want to specify which one to use for Heeler.
-Use the `HEALER_RENDER_NODE` environment variable (defaults to `/dev/dri/renderD128`) to control this.
+Use the `HEELER_RENDER_NODE` environment variable (defaults to `/dev/dri/renderD128`) to control this.
 
 [TIP]
 ====
@@ -550,7 +550,7 @@ There are two main separated parts that make use of HW acceleration in Heeler:
 
 Since Heeler supports HW accelerated zero-copy pipelines it's best to keep both the Wayland rendering and the Gstreamer encoding on the same GPU.
 
-`HEALER_RENDER_NODE` and `HEALER_ENCODER_NODE` set the defaults, and each app can override them in `config.toml`:
+`HEELER_RENDER_NODE` and `HEELER_ENCODER_NODE` set the defaults, and each app can override them in `config.toml`:
 
 [source,toml]
 ....
@@ -561,7 +561,7 @@ render_node = "/dev/dri/renderD129"          # <1>
 ....
 
 <1> The app runs, and its desktop is rendered, on this GPU. It is also *encoded* there: Heeler picks the encoders that work on that GPU (ex: NVENC on Nvidia, VA-API on Intel/AMD) and keeps the zero-copy pipeline when possible.
-<2> Optional: encode on a different GPU than the one rendering (frames are then copied between GPUs). Defaults to `render_node`, or to `HEALER_ENCODER_NODE` for apps without a `render_node`.
+<2> Optional: encode on a different GPU than the one rendering (frames are then copied between GPUs). Defaults to `render_node`, or to `HEELER_ENCODER_NODE` for apps without a `render_node`.
 
 If an app's GPU doesn't exist, isn't a GPU, or has no working H.264 encoder, Heeler logs a warning and encodes that app on the default GPU instead.
 
@@ -669,17 +669,17 @@ The password is cleared and a new setup code is shown.
 == One Steam library for every account
 
 By default each account has its own Steam, so four accounts that all play the same game download it four times.
-Set `HEALER_STEAM_LIBRARY` on the Heeler container to a folder on the host and every Steam container uses that folder as
+Set `HEELER_STEAM_LIBRARY` on the Heeler container to a folder on the host and every Steam container uses that folder as
 a shared library: games download once, whichever account starts the download.
 
 [source,yaml]
 ----
 environment:
-  - HEALER_STEAM_LIBRARY=/mnt/games/steam-library
+  - HEELER_STEAM_LIBRARY=/mnt/games/steam-library
 ----
 
 * The value must be an absolute host path (Heeler does not expand `~` or `$HOME`). Create the folder first and make it
-writable by the user the apps run as (`HEALER_DEFAULT_RUN_UID` / `HEALER_DEFAULT_RUN_GID`, 1000 by default).
+writable by the user the apps run as (`HEELER_DEFAULT_RUN_UID` / `HEELER_DEFAULT_RUN_GID`, 1000 by default).
 * It applies to the Steam app only (an app whose Docker image name contains `steam`).
 * On start Heeler mounts the folder at `/steam-library` and adds it to the account's `libraryfolders.vdf`. In Steam it
 shows up under *Settings > Storage*; choose it when installing a game.
